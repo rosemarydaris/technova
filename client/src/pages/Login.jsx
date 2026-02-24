@@ -9,7 +9,7 @@ const Login = () => {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
-const { setUser } = useUser();
+  const { setUser } = useUser();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -49,20 +49,14 @@ const { setUser } = useUser();
         password: formData.password
       });
 
-      // Backend should return token & domain
       const { token, name, domain } = res.data;
 
-      // Save login info to localStorage
-      // localStorage.setItem("token", token);
-      // localStorage.setItem("userEmail", formData.email);
-      // localStorage.setItem("userName", name);
-      // localStorage.setItem("userDomain", domain);
       setUser({
-  token,
-  email: formData.email,
-  name,
-  domain
-});
+        token,
+        email: formData.email,
+        name,
+        domain
+      });
 
 
       alert("Login successful");
@@ -314,41 +308,15 @@ const { setUser } = useUser();
                     Remember me
                   </label>
                 </div>
-                <span className="forgot-link" onClick={handleForgotPassword}>
-                  Forgot Password?
-                </span>
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="submit-btn"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? 'Signing In...' : 'Sign In'}
               </button>
-
-              <div className="divider">
-                <div className="divider-line"></div>
-                <span className="divider-text">OR CONTINUE WITH</span>
-                <div className="divider-line"></div>
-              </div>
-
-              <div className="social-login">
-                <button 
-                  type="button" 
-                  className="social-btn"
-                  onClick={() => handleSocialLogin('Google')}
-                >
-                  <span>🔵</span> Google
-                </button>
-                <button 
-                  type="button" 
-                  className="social-btn"
-                  onClick={() => handleSocialLogin('GitHub')}
-                >
-                  <span>⚫</span> GitHub
-                </button>
-              </div>
 
               <div className="register-link">
                 Don't have an account?{" "}

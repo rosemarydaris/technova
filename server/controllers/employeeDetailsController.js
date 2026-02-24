@@ -2,6 +2,7 @@
 const Employee = require("../models/employee");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
+const { calculateProfileCompletion } = require("../utils/profileCompletionUtils");
 
 // Submit or Update Employee Details
 exports.submitEmployeeDetails = async (req, res) => {
@@ -82,13 +83,22 @@ exports.getMyDetails = async (req, res) => {
         );
 
         if (!employee) {
+            // Calculate completion with just user data
+            const completion = calculateProfileCompletion(user, null);
             return res.status(404).json({
                 message: "Employee details not found",
-                isDetailsSubmitted: false
+                isDetailsSubmitted: false,
+                profileCompletion: completion
             });
         }
 
-        res.json(employee);
+        // Calculate profile completion
+        const completion = calculateProfileCompletion(user, employee);
+
+        res.json({
+            ...employee.toObject(),
+            profileCompletion: completion
+        });
     } catch (err) {
         console.error("Error fetching employee details:", err);
         res.status(500).json({ message: err.message });
@@ -102,7 +112,17 @@ exports.getAllEmployeeDetails = async (req, res) => {
             .populate("userId", "fullName email domain phone company")
             .sort({ createdAt: -1 });
 
-        res.json(employees);
+        // Add profile completion to each employee
+        const employeesWithCompletion = employees.map(employee => {
+            const user = employee.userId;
+            const completion = calculateProfileCompletion(user, employee);
+            return {
+                ...employee.toObject(),
+                profileCompletion: completion
+            };
+        });
+
+        res.json(employeesWithCompletion);
     } catch (err) {
         console.error("Error fetching all employee details:", err);
         res.status(500).json({ message: err.message });
@@ -123,7 +143,14 @@ exports.getEmployeeDetailsById = async (req, res) => {
             return res.status(404).json({ message: "Employee details not found" });
         }
 
-        res.json(employee);
+        // Calculate profile completion
+        const user = employee.userId;
+        const completion = calculateProfileCompletion(user, employee);
+
+        res.json({
+            ...employee.toObject(),
+            profileCompletion: completion
+        });
     } catch (err) {
         console.error("Error fetching employee details:", err);
         res.status(500).json({ message: err.message });
@@ -135,19 +162,34 @@ exports.getEmployeeDetailsByUserId = async (req, res) => {
     try {
         const { userId } = req.params;
 
+        // Get user data
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
         const employee = await Employee.findOne({ userId }).populate(
             "userId",
             "fullName email domain phone company"
         );
 
         if (!employee) {
+            // Calculate completion with just user data
+            const completion = calculateProfileCompletion(user, null);
             return res.status(404).json({
                 message: "Employee details not found",
-                isDetailsSubmitted: false
+                isDetailsSubmitted: false,
+                profileCompletion: completion
             });
         }
 
-        res.json(employee);
+        // Calculate profile completion
+        const completion = calculateProfileCompletion(user, employee);
+
+        res.json({
+            ...employee.toObject(),
+            profileCompletion: completion
+        });
     } catch (err) {
         console.error("Error fetching employee details:", err);
         res.status(500).json({ message: err.message });

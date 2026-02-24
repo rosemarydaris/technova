@@ -7,22 +7,51 @@ import { useNavigate } from "react-router-dom";
 
 const Home = () => {
   const [activeTab, setActiveTab] = useState('innovation');
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    company: '',
+    message: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const navigate = useNavigate();
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    // Simulate API call
+    setTimeout(() => {
+      setIsSubmitting(false);
+      setSubmitted(true);
+      setFormData({ name: '', email: '', company: '', message: '' });
+
+      // Reset success message after 5 seconds
+      setTimeout(() => setSubmitted(false), 5000);
+    }, 1500);
+  };
+
   useEffect(() => {
     // Smooth scrolling for navigation links
-   const handleClick = (e) => {
-  const href = e.currentTarget.getAttribute('href');
-  if (href && href !== '#' && href.startsWith('#')) {  // ✅ ignore '#' only
-    e.preventDefault();
-    const target = document.querySelector(href);
-    if (target) {
-      target.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }
-  }
-};
+    const handleClick = (e) => {
+      const href = e.currentTarget.getAttribute('href');
+      if (href && href !== '#' && href.startsWith('#')) {  // ✅ ignore '#' only
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) {
+          target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      }
+    };
 
     const links = document.querySelectorAll('a[href^="#"]');
     links.forEach(link => link.addEventListener('click', handleClick));
@@ -31,7 +60,7 @@ const Home = () => {
     const handleScroll = () => {
       let current = '';
       const sections = document.querySelectorAll('section[id]');
-      
+
       sections.forEach(section => {
         const sectionTop = section.offsetTop;
         if (window.pageYOffset >= (sectionTop - 200)) {
@@ -85,12 +114,7 @@ const Home = () => {
                 <a className="nav-link" href="#contact">Contact</a>
               </li>
             </ul>
-            <div className="social-icons ms-4">
-              <a href="#"><i className="fab fa-twitter"></i></a>
-              <a href="#"><i className="fab fa-github"></i></a>
-              <a href="#"><i className="fab fa-stack-overflow"></i></a>
-              <a href="#"><i className="fab fa-linkedin"></i></a>
-            </div>
+
           </div>
         </div>
       </nav>
@@ -103,32 +127,32 @@ const Home = () => {
               <div className="hero-content">
                 <span className="badge-custom">IT MANAGEMENT EXCELLENCE</span>
                 <h1 className="hero-title">Complete IT Infrastructure Management System</h1>
-             <p className="hero-description">
-  TECHNOVA Solutions provides a centralized company management system to manage employees, projects, tasks, roles, and reports efficiently using modern web technologies.
-</p>
+                <p className="hero-description">
+                  TECHNOVA Solutions provides a centralized company management system to manage employees, projects, tasks, roles, and reports efficiently using modern web technologies.
+                </p>
 
-             <div>
-  {/* Get Started button */}
-  <button
-    className="btn btn-primary-custom me-3"
-    onClick={() => navigate("/login")}
-  >
-    Get Started
-  </button>
+                <div>
+                  {/* Get Started button */}
+                  <button
+                    className="btn btn-primary-custom me-3"
+                    onClick={() => navigate("/login")}
+                  >
+                    Get Started
+                  </button>
 
-  {/* Watch Demo button */}
-  <button
+                  {/* Watch Demo button */}
+                  {/* <button
     className="btn btn-secondary-custom"
     onClick={() => navigate("/login")}
   >
     <i className="fas fa-play-circle me-2"></i>
     Watch Demo
-  </button>
-</div>
+  </button> */}
+                </div>
 
 
 
-                
+
               </div>
             </div>
             <div className="col-lg-6">
@@ -206,19 +230,19 @@ const Home = () => {
 
         <div className="row align-items-center mb-5">
           <div className="col-lg-6 mb-4 mb-lg-0">
-            <img src="https://images.unsplash.com/photo-1551434678-e076c223a692?w=600&h=400&fit=crop" 
-                 alt="IT Management Dashboard" 
-                 className="img-fluid rounded-3" />
+            <img src="https://images.unsplash.com/photo-1551434678-e076c223a692?w=600&h=400&fit=crop"
+              alt="IT Management Dashboard"
+              className="img-fluid rounded-3" />
           </div>
           <div className="col-lg-6">
             <h2 className="display-6 fw-bold mb-4">Transform Your IT Operations</h2>
             <p className="text-secondary mb-4">
-             TECHNOVA Solutions provides a centralized platform to manage company operations including employees, projects, tasks, and reporting.
-</p>
+              TECHNOVA Solutions provides a centralized platform to manage company operations including employees, projects, tasks, and reporting.
+            </p>
             <p className="text-secondary mb-4">
               Our system reduces manual workload, eliminates paperwork, improves response times, and provides real-time insights into your IT environment. With role-based access control and comprehensive audit trails, you maintain complete security and compliance.
             </p>
-            <button className="btn btn-primary-custom">Learn More</button>
+            {/* <button className="btn btn-primary-custom">Learn More</button> */}
           </div>
         </div>
 
@@ -265,7 +289,7 @@ const Home = () => {
           <h2 className="section-title">Core Modules</h2>
           <p className="section-subtitle">Powerful features to manage every aspect of your IT infrastructure</p>
         </div>
-        
+
         <div className="row g-4">
           <div className="col-lg-4 col-md-6">
             <div className="service-card">
@@ -274,7 +298,7 @@ const Home = () => {
               </div>
               <h3 className="service-title">Asset Management</h3>
               <p className="service-text">Track all hardware and software assets, manage licenses, monitor depreciation, and maintain complete asset lifecycle from procurement to disposal.</p>
-              <a href="#" className="service-link">Learn More <i className="fas fa-arrow-right ms-2"></i></a>
+
             </div>
           </div>
           <div className="col-lg-4 col-md-6">
@@ -284,7 +308,7 @@ const Home = () => {
               </div>
               <h3 className="service-title">Help Desk System</h3>
               <p className="service-text">Streamlined ticket management with automated routing, SLA tracking, escalation workflows, and comprehensive knowledge base integration.</p>
-              <a href="#" className="service-link">Learn More <i className="fas fa-arrow-right ms-2"></i></a>
+
             </div>
           </div>
           <div className="col-lg-4 col-md-6">
@@ -294,7 +318,7 @@ const Home = () => {
               </div>
               <h3 className="service-title">Network Monitoring</h3>
               <p className="service-text">Real-time network performance monitoring, bandwidth analysis, device health checks, and automated alerts for proactive issue resolution.</p>
-              <a href="#" className="service-link">Learn More <i className="fas fa-arrow-right ms-2"></i></a>
+
             </div>
           </div>
           <div className="col-lg-4 col-md-6">
@@ -304,7 +328,7 @@ const Home = () => {
               </div>
               <h3 className="service-title">Access Control</h3>
               <p className="service-text">Role-based permissions, user authentication, single sign-on integration, and comprehensive audit logging for security compliance.</p>
-              <a href="#" className="service-link">Learn More <i className="fas fa-arrow-right ms-2"></i></a>
+
             </div>
           </div>
           <div className="col-lg-4 col-md-6">
@@ -314,7 +338,7 @@ const Home = () => {
               </div>
               <h3 className="service-title">Analytics & Reports</h3>
               <p className="service-text">Customizable dashboards, scheduled reports, data visualization, and business intelligence tools for data-driven decision making.</p>
-              <a href="#" className="service-link">Learn More <i className="fas fa-arrow-right ms-2"></i></a>
+
             </div>
           </div>
           <div className="col-lg-4 col-md-6">
@@ -324,7 +348,7 @@ const Home = () => {
               </div>
               <h3 className="service-title">Change Management</h3>
               <p className="service-text">Track IT changes, manage approvals, document configurations, and maintain change history for compliance and rollback capabilities.</p>
-              <a href="#" className="service-link">Learn More <i className="fas fa-arrow-right ms-2"></i></a>
+
             </div>
           </div>
         </div>
@@ -343,32 +367,32 @@ const Home = () => {
 
               {/* Tabs Navigation */}
               <div className="custom-tabs mb-4">
-                <button 
+                <button
                   className={`tab-btn ${activeTab === 'innovation' ? 'active' : ''}`}
                   onClick={() => setActiveTab('innovation')}
                 >
-                  <span className="tab-number">01</span> Automation<br/>
+                  <span className="tab-number">01</span> Automation<br />
                   <small>Intelligent workflows</small>
                 </button>
-                <button 
+                <button
                   className={`tab-btn ${activeTab === 'strategy' ? 'active' : ''}`}
                   onClick={() => setActiveTab('strategy')}
                 >
-                  <span className="tab-number">02</span> Integration<br/>
+                  <span className="tab-number">02</span> Integration<br />
                   <small>Seamless connectivity</small>
                 </button>
-                <button 
+                <button
                   className={`tab-btn ${activeTab === 'performance' ? 'active' : ''}`}
                   onClick={() => setActiveTab('performance')}
                 >
-                  <span className="tab-number">03</span> Security<br/>
+                  <span className="tab-number">03</span> Security<br />
                   <small>Enterprise protection</small>
                 </button>
-                <button 
+                <button
                   className={`tab-btn ${activeTab === 'integration' ? 'active' : ''}`}
                   onClick={() => setActiveTab('integration')}
                 >
-                  <span className="tab-number">04</span> Scalability<br/>
+                  <span className="tab-number">04</span> Scalability<br />
                   <small>Growth ready</small>
                 </button>
               </div>
@@ -521,12 +545,12 @@ const Home = () => {
 
             <div className="col-lg-6">
               <div className="features-image-section">
-                <img src="https://plus.unsplash.com/premium_photo-1663040170703-cb0d52d65165?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" 
-                     alt="IT Dashboard" 
-                     className="img-fluid rounded-3 shadow-lg" />
+                <img src="https://plus.unsplash.com/premium_photo-1663040170703-cb0d52d65165?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                  alt="IT Dashboard"
+                  className="img-fluid rounded-3 shadow-lg" />
                 <div className="speed-badge">
                   <i className="fas fa-bolt"></i>
-                
+
                 </div>
               </div>
             </div>
@@ -613,10 +637,7 @@ const Home = () => {
                   </div>
                 </div>
 
-                <div className="d-flex gap-3">
-                  <button className="btn btn-primary-custom flex-fill">Request Demo</button>
-                  <button className="btn btn-secondary-custom">Start Free Trial</button>
-                </div>
+
 
                 <p className="text-center mt-3 mb-0">
                   <i className="fas fa-phone text-primary me-2"></i>
@@ -654,7 +675,7 @@ const Home = () => {
                 <li><i className="fas fa-check text-primary me-2"></i>Email support</li>
                 <li><i className="fas fa-check text-primary me-2"></i>10GB storage</li>
               </ul>
-              <button className="btn btn-outline-primary w-100">Start Free Trial</button>
+
             </div>
           </div>
 
@@ -679,7 +700,7 @@ const Home = () => {
                 <li><i className="fas fa-check text-primary me-2"></i>API access</li>
                 <li><i className="fas fa-check text-primary me-2"></i>Network monitoring</li>
               </ul>
-              <button className="btn btn-primary-custom w-100">Start Free Trial</button>
+
             </div>
           </div>
 
@@ -703,7 +724,7 @@ const Home = () => {
                 <li><i className="fas fa-check text-primary me-2"></i>Advanced security</li>
                 <li><i className="fas fa-check text-primary me-2"></i>Custom integrations</li>
               </ul>
-              <button className="btn btn-outline-primary w-100">Contact Sales</button>
+
             </div>
           </div>
         </div>
@@ -720,17 +741,12 @@ const Home = () => {
           <div className="col-lg-3 col-md-6">
             <div className="team-card">
               <div className="team-image">
-                 <img
-          src="https://plus.unsplash.com/premium_photo-1683121009207-718ad5acfa49?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-          alt="Team member"
-          className="img-fluid"
-        />
-                <div className="team-social">
-                  <a href="#"><i className="fab fa-twitter"></i></a>
-                  <a href="#"><i className="fab fa-github"></i></a>
-                  <a href="#"><i className="fab fa-stack-overflow"></i></a>
-                  <a href="#"><i className="fab fa-linkedin"></i></a>
-                </div>
+                <img
+                  src="https://plus.unsplash.com/premium_photo-1683121009207-718ad5acfa49?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                  alt="Team member"
+                  className="img-fluid"
+                />
+
               </div>
               <div className="team-info">
                 <h4 className="team-name">Daniel Roberts</h4>
@@ -743,17 +759,12 @@ const Home = () => {
           <div className="col-lg-3 col-md-6">
             <div className="team-card">
               <div className="team-image">
-               <img
-          src="https://plus.unsplash.com/premium_photo-1661522403494-4c3c5f6c97c8?q=80&w=2719&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-          alt="Team member"
-          className="img-fluid"
-        />
-                <div className="team-social">
-                  <a href="#"><i className="fab fa-twitter"></i></a>
-                  <a href="#"><i className="fab fa-github"></i></a>
-                  <a href="#"><i className="fab fa-stack-overflow"></i></a>
-                  <a href="#"><i className="fab fa-linkedin"></i></a>
-                </div>
+                <img
+                  src="https://plus.unsplash.com/premium_photo-1661522403494-4c3c5f6c97c8?q=80&w=2719&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                  alt="Team member"
+                  className="img-fluid"
+                />
+
               </div>
               <div className="team-info">
                 <h4 className="team-name">Olivia Brown</h4>
@@ -770,17 +781,12 @@ const Home = () => {
           <div className="col-lg-3 col-md-6">
             <div className="team-card">
               <div className="team-image">
-                  <img
-          src="https://plus.unsplash.com/premium_photo-1661377166972-42f22607c24e?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-          alt="Team member"
-          className="img-fluid"
-        />
-                <div className="team-social">
-                  <a href="#"><i className="fab fa-twitter"></i></a>
-                  <a href="#"><i className="fab fa-github"></i></a>
-                  <a href="#"><i className="fab fa-stack-overflow"></i></a>
-                  <a href="#"><i className="fab fa-linkedin"></i></a>
-                </div>
+                <img
+                  src="https://plus.unsplash.com/premium_photo-1661377166972-42f22607c24e?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                  alt="Team member"
+                  className="img-fluid"
+                />
+
               </div>
               <div className="team-info">
                 <h4 className="team-name">William Carter</h4>
@@ -793,17 +799,12 @@ const Home = () => {
           <div className="col-lg-3 col-md-6">
             <div className="team-card">
               <div className="team-image">
-                 <img
-          src="https://plus.unsplash.com/premium_photo-1664910307765-688299f84d3a?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-          alt="Team member"
-          className="img-fluid"
-        />
-                <div className="team-social">
-                  <a href="#"><i className="fab fa-twitter"></i></a>
-                  <a href="#"><i className="fab fa-github"></i></a>
-                  <a href="#"><i className="fab fa-stack-overflow"></i></a>
-                  <a href="#"><i className="fab fa-linkedin"></i></a>
-                </div>
+                <img
+                  src="https://plus.unsplash.com/premium_photo-1664910307765-688299f84d3a?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                  alt="Team member"
+                  className="img-fluid"
+                />
+
               </div>
               <div className="team-info">
                 <h4 className="team-name">Charlotte Miller</h4>
@@ -831,7 +832,7 @@ const Home = () => {
               <h4 className="contact-title">Email Support</h4>
               <p className="contact-detail">support@technovasolutions.com</p>
               <p className="contact-note">
-                <i className="fas fa-circle text-success me-2" style={{fontSize: '8px'}}></i>
+                <i className="fas fa-circle text-success me-2" style={{ fontSize: '8px' }}></i>
                 Response within 2 hours
               </p>
             </div>
@@ -843,7 +844,7 @@ const Home = () => {
               <h4 className="contact-title">Phone Support</h4>
               <p className="contact-detail">+1 (800) 123-4567</p>
               <p className="contact-note">
-                <i className="fas fa-circle text-success me-2" style={{fontSize: '8px'}}></i>
+                <i className="fas fa-circle text-success me-2" style={{ fontSize: '8px' }}></i>
                 Available 24/7
               </p>
             </div>
@@ -853,9 +854,9 @@ const Home = () => {
                 <i className="fas fa-map-marker-alt"></i>
               </div>
               <h4 className="contact-title">Head Office</h4>
-              <p className="contact-detail">Tech Park, Whitefield<br/>Bangalore, KA 560066</p>
+              <p className="contact-detail">Tech Park, Whitefield<br />Bangalore, KA 560066</p>
               <p className="contact-note">
-                <i className="fas fa-circle text-success me-2" style={{fontSize: '8px'}}></i>
+                <i className="fas fa-circle text-success me-2" style={{ fontSize: '8px' }}></i>
                 Mon-Sat: 9AM-6PM IST
               </p>
             </div>
@@ -863,48 +864,95 @@ const Home = () => {
 
           <div className="col-lg-8">
             <div className="contact-form-card">
-              <div className="mb-4">
-                <span className="badge-small">Get Started</span>
-                <h3 className="h4 fw-bold mt-2">Send us a message</h3>
-                <p className="text-secondary">Our team will respond within 24 hours</p>
-              </div>
-
-              <form>
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <input type="text" className="form-control custom-input" placeholder="Full Name" required />
+              {submitted ? (
+                <div className="text-center py-5">
+                  <div className="mb-4">
+                    <i className="fas fa-check-circle text-success" style={{ fontSize: '4rem' }}></i>
                   </div>
-                  <div className="col-md-6">
-                    <input type="email" className="form-control custom-input" placeholder="Work Email" required />
-                  </div>
-                  <div className="col-md-6">
-                    <input type="text" className="form-control custom-input" placeholder="Company Name" />
-                  </div>
-                  {/* <div className="col-md-6">
-                    <select className="form-select custom-input">
-                      <option selected>Select Inquiry Type</option>
-                      <option value="demo">Request Demo</option>
-                      <option value="sales">Sales Inquiry</option>
-                      <option value="support">Technical Support</option>
-                      <option value="partnership">Partnership</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div> */}
-                  <div className="col-12">
-                    <textarea className="form-control custom-input" rows="5" placeholder="Tell us about your IT management requirements"></textarea>
-                  </div>
-                  <div className="col-12">
-                    <button type="submit" className="btn btn-primary-custom w-100">
-                      Send Message <i className="fas fa-paper-plane ms-2"></i>
-                    </button>
-                    <p className="text-center mt-3 mb-0 small text-secondary">
-                      <i className="fas fa-shield-alt me-2"></i>
-                      Your information is secure and will never be shared
-                    </p>
-                  </div>
+                  <h3 className="fw-bold mb-3">Message Sent Successfully!</h3>
+                  <p className="text-secondary mb-0">Thank you for reaching out. Our team will get back to you within 24 hours.</p>
                 </div>
-              </form>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <span className="badge-small">Get Started</span>
+                    <h3 className="h4 fw-bold mt-2">Send us a message</h3>
+                    <p className="text-secondary">Our team will respond within 24 hours</p>
+                  </div>
+
+                  <form onSubmit={handleSubmit}>
+                    <div className="row g-3">
+                      <div className="col-md-6">
+                        <input
+                          type="text"
+                          name="name"
+                          className="form-control custom-input"
+                          placeholder="Full Name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <input
+                          type="email"
+                          name="email"
+                          className="form-control custom-input"
+                          placeholder="Work Email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+                      <div className="col-md-12">
+                        <input
+                          type="text"
+                          name="company"
+                          className="form-control custom-input"
+                          placeholder="Company Name"
+                          value={formData.company}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="col-12">
+                        <textarea
+                          name="message"
+                          className="form-control custom-input"
+                          rows="5"
+                          placeholder="Tell us about your IT management requirements"
+                          value={formData.message}
+                          onChange={handleInputChange}
+                          required
+                        ></textarea>
+                      </div>
+                      <div className="col-12">
+                        <button
+                          type="submit"
+                          className="btn btn-primary-custom w-100"
+                          disabled={isSubmitting}
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              Send Message <i className="fas fa-paper-plane ms-2"></i>
+                            </>
+                          )}
+                        </button>
+                        <p className="text-center mt-3 mb-0 small text-secondary">
+                          <i className="fas fa-shield-alt me-2"></i>
+                          Your information is secure and will never be shared
+                        </p>
+                      </div>
+                    </div>
+                  </form>
+                </>
+              )}
             </div>
+
           </div>
         </div>
 
@@ -933,16 +981,7 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Social Media Section */}
-        <div className="text-center mt-5">
-          <p className="text-secondary mb-3">Connect with us on social media</p>
-          <div className="social-links-large">
-            <a href="#"><i className="fab fa-twitter"></i></a>
-            <a href="#"><i className="fab fa-github"></i></a>
-            <a href="#"><i className="fab fa-stack-overflow"></i></a>
-            <a href="#"><i className="fab fa-linkedin"></i></a>
-          </div>
-        </div>
+
       </section>
 
       {/* Footer */}
@@ -952,19 +991,14 @@ const Home = () => {
             <div className="col-lg-4">
               <h3 className="navbar-brand mb-3">TECHNOVA Solutions</h3>
 
-              <p className="text-secondary mb-3">Tech Park, Whitefield<br/>Bangalore, KA 560066</p>
+              <p className="text-secondary mb-3">Tech Park, Whitefield<br />Bangalore, KA 560066</p>
               <p className="text-secondary mb-2">
                 <strong>Phone:</strong> +1 (800) 123-4567
               </p>
               <p className="text-secondary">
                 <strong>Email:</strong> info@itmanagepro.com
               </p>
-              <div className="social-icons mt-3">
-                <a href="#"><i className="fab fa-twitter"></i></a>
-                <a href="#"><i className="fab fa-github"></i></a>
-                <a href="#"><i className="fab fa-stack-overflow"></i></a>
-                <a href="#"><i className="fab fa-linkedin"></i></a>
-              </div>
+
             </div>
 
             <div className="col-lg-2 col-md-6">
@@ -989,17 +1023,10 @@ const Home = () => {
               </ul>
             </div>
 
-            <div className="col-lg-4 col-md-12">
-              <h5 className="fw-bold mb-3">Newsletter</h5>
-              <p className="text-secondary mb-3">Get IT management tips and product updates</p>
-              <div className="newsletter-form">
-                <input type="email" className="form-control" placeholder="Your email address" />
-                <button className="btn btn-primary-custom mt-2 w-100">Subscribe</button>
-              </div>
-            </div>
+
           </div>
 
-          <hr className="my-4" style={{borderColor: 'rgba(255,255,255,0.1)'}} />
+          <hr className="my-4" style={{ borderColor: 'rgba(255,255,255,0.1)' }} />
 
           <div className="text-center">
             <p className="mb-0 text-secondary">

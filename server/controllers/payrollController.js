@@ -56,9 +56,32 @@ exports.calculatePayroll = async (req, res) => {
     });
 
     // Calculate attendance summary
-    const totalWorkingDays = getDaysInMonth(month, year);
+    const totalWorkingDays = getWorkingDaysInMonth(month, year);
     const presentDays = attendanceRecords.filter(a => a.status === "Present").length;
-    const absentDays = attendanceRecords.filter(a => a.status === "Absent").length;
+
+    // For absent count: we should only count absences on ACTUAL working days past.
+    // However, the current model logic relies on 'absentDays' to deduct.
+    // Let's refine how absentDays is calculated for the current month.
+
+    const now = new Date();
+    const isCurrentMonth = now.getFullYear() === year && (now.getMonth() + 1) === month;
+
+    let absentDays = attendanceRecords.filter(a => a.status === "Absent").length;
+
+    if (isCurrentMonth) {
+      // Days that have passed but have no attendance record AND are working days are technically absent?
+      // Actually, if we just count records with status "Absent", it should be fine IF they are marked.
+      // But if they are NOT marked, we need to infer them up to today.
+      const today = now.getDate();
+      const workingDaysPassed = getWorkingDaysUntil(year, month, today);
+      const presentOrLateOrHalf = attendanceRecords.filter(a => ["Present", "Late", "Half Day"].includes(a.status)).length;
+      absentDays = Math.max(0, workingDaysPassed - presentOrLateOrHalf);
+    } else {
+      // For past months, absent = total working days - (present/late/half/approved leave)
+      // This is handled better in the save hook usually, but let's be consistent.
+      absentDays = attendanceRecords.filter(a => a.status === "Absent").length;
+    }
+
     const lateDays = attendanceRecords.filter(a => a.status === "Late").length;
     const halfDays = attendanceRecords.filter(a => a.status === "Half Day").length;
 
@@ -152,25 +175,81 @@ exports.calculatePayroll = async (req, res) => {
   }
 };
 
+// Helper function to get actual working days (Monday-Friday) in a month
+function getWorkingDaysInMonth(month, year) {
+  let count = 0;
+  const date = new Date(year, month - 1, 1);
+  while (date.getMonth() === month - 1) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) { // Not Sunday (0) or Saturday (6)
+      count++;
+    }
+    date.setDate(date.getDate() + 1);
+  }
+  return count;
+}
+
 // Helper function to get days in month
 function getDaysInMonth(month, year) {
   return new Date(year, month, 0).getDate();
 }
 
+// Helper function to get working days UP TO A CERTAIN DATE (for current month)
+function getWorkingDaysUntil(year, month, day) {
+  let count = 0;
+  for (let d = 1; d <= day; d++) {
+    const date = new Date(year, month - 1, d);
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++;
+    }
+  }
+  return count;
+}
+
 // ================= GET ALL PAYROLLS (ADMIN) =================
 exports.getAllPayrolls = async (req, res) => {
   try {
-    const { month, year, employeeId, paymentStatus } = req.query;
-    const query = {};
+    const { month, year, employeeId, paymentStatus, domain } = req.query;
 
-    if (employeeId) query.employeeId = employeeId;
-    if (month) query.month = parseInt(month);
-    if (year) query.year = parseInt(year);
-    if (paymentStatus) query.paymentStatus = paymentStatus;
+    // Build match query
+    const matchStage = {};
+    if (employeeId) matchStage.employeeId = new mongoose.Types.ObjectId(employeeId);
+    if (month) matchStage.month = parseInt(month);
+    if (year) matchStage.year = parseInt(year);
+    if (paymentStatus) matchStage.paymentStatus = paymentStatus;
 
-    const payrolls = await Payroll.find(query)
-      .populate("employeeId", "fullName email domain phone")
-      .sort({ year: -1, month: -1 });
+    const pipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "users",
+          localField: "employeeId",
+          foreignField: "_id",
+          as: "employeeDetails"
+        }
+      },
+      { $unwind: "$employeeDetails" },
+      {
+        $addFields: {
+          "employeeId": "$employeeDetails" // Replace so it looks populated
+        }
+      },
+      {
+        $project: {
+          "employeeDetails.password": 0
+        }
+      },
+      { $sort: { year: -1, month: -1 } }
+    ];
+
+    if (domain) {
+      pipeline.push({
+        $match: { "employeeDetails.domain": { $regex: new RegExp(`^${domain}$`, 'i') } }
+      });
+    }
+
+    const payrolls = await Payroll.aggregate(pipeline);
 
     res.status(200).json(payrolls);
   } catch (err) {
@@ -626,12 +705,8 @@ async function calculateSinglePayrollInternal(employeeId, month, year) {
   });
 
   // Calculate attendance summary
-  const totalWorkingDays = getDaysInMonth(month, year);
-  // presentDays count: Full day = 1, Late = 1 (usually), Half Day = 0.5? 
-  // Standard pro-rata: We count Present + Approved Leaves as "Paid Days".
-  // Absent = Total - (Present + Approved Leaves)
+  const totalWorkingDays = getWorkingDaysInMonth(month, year);
 
-  // presentDays count: Full day = 1, Late = 1 (usually).
   const presentCount = attendanceRecords.filter(a => a.status === "Present").length;
   const lateCount = attendanceRecords.filter(a => a.status === "Late").length;
   const halfDayCount = attendanceRecords.filter(a => a.status === "Half Day").length;
@@ -639,10 +714,19 @@ async function calculateSinglePayrollInternal(employeeId, month, year) {
   // Displayed Present Days (Full + Late)
   const presentDays = presentCount + lateCount;
 
-  // absentDays (Unpaid) = totalWorkingDays - (presentDays + approvedLeaveDays + halfDayCount)
-  // These are the days with ZERO presence. 
-  // Deductions in model will be: (absentDays * 1) + (halfDayCount * 0.5)
-  const absentDays = Math.max(0, totalWorkingDays - (presentDays + approvedLeaveDays + halfDayCount));
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && (now.getMonth() + 1) === month;
+
+  let absentDays;
+  if (isCurrentMonth) {
+    const today = now.getDate();
+    const workingDaysPassed = getWorkingDaysUntil(year, month, today);
+    const presentOrLateOrHalf = presentCount + lateCount + halfDayCount;
+    // Approving leaves is also part of "worked" or "excused" days
+    absentDays = Math.max(0, workingDaysPassed - (presentOrLateOrHalf + approvedLeaveDays));
+  } else {
+    absentDays = Math.max(0, totalWorkingDays - (presentDays + approvedLeaveDays + halfDayCount));
+  }
 
   const lateDays = lateCount;
   const halfDays = halfDayCount;

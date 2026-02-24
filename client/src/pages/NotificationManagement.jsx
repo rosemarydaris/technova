@@ -223,21 +223,22 @@ const NotificationManagement = () => {
                 .form-control, .form-select {
                     width: 100%;
                     padding: 0.75rem 1rem;
-                    background: #0f172a;
-                    border: 1px solid #334155;
+                    background: #334155; /* Lighter background for better visibility */
+                    border: 1px solid #475569;
                     border-radius: 8px;
-                    color: #ffffff;
+                    color: #f1f5f9 !important; /* Explicit bright text color */
                     font-size: 1rem;
-                    transition: border-color 0.2s;
+                    transition: border-color 0.2s, box-shadow 0.2s;
                     box-sizing: border-box;
                 }
                 .form-control::placeholder {
-                    color: rgba(148, 163, 184, 0.5);
+                    color: #94a3b8;
                 }
                 .form-control:focus, .form-select:focus {
                     outline: none;
                     border-color: #3b82f6;
-                    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+                    background: #1e293b; /* Slightly darker on focus */
                 }
                 .form-row {
                     display: flex;

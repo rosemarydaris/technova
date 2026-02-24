@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import AdminTasks from "./AdminTasks";
+import ProfileCompletionBar from "../components/ProfileCompletionBar";
 import "./AdminDashboard.css";
 
 const AdminDashboard = () => {
@@ -45,7 +46,7 @@ const AdminDashboard = () => {
 
   const fetchEmployees = async () => {
     try {
-      const res = await axios.get("http://localhost:5001/api/admin/employees", {
+      const res = await axios.get("http://localhost:5001/api/employees/with-details", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setEmployees(res.data);
@@ -225,6 +226,10 @@ const AdminDashboard = () => {
     lateToday: allAttendance.filter(a => {
       const today = new Date().toDateString();
       return new Date(a.date).toDateString() === today && a.status === "Late";
+    }).length,
+    absentToday: employees.filter(e => e.email !== "admin@technova.com").length - allAttendance.filter(a => {
+      const today = new Date().toDateString();
+      return new Date(a.date).toDateString() === today && (a.status === "Present" || a.status === "Late" || a.status === "Half Day");
     }).length,
     avgAttendance: allAttendance.length > 0
       ? ((allAttendance.filter(a => a.status === "Present" || a.status === "Late").length / allAttendance.length) * 100).toFixed(1)
@@ -505,10 +510,48 @@ const AdminDashboard = () => {
                         key={emp._id}
                         className={`employee-card ${selectedEmployee?._id === emp._id ? "active" : ""}`}
                         onClick={() => viewProfile(emp)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '1rem',
+                          padding: '1rem',
+                          cursor: 'pointer',
+                          borderRadius: '8px',
+                          background: selectedEmployee?._id === emp._id ? 'rgba(59, 130, 246, 0.1)' : 'rgba(15, 23, 42, 0.4)',
+                          border: '1px solid rgba(148, 163, 184, 0.1)',
+                          transition: 'all 0.2s ease'
+                        }}
                       >
-                        <div className="employee-name">{emp.fullName}</div>
-                        <div className="employee-email">{emp.email}</div>
-                        <span className="employee-badge">{emp.domain}</span>
+                        <div style={{ flexShrink: 0 }}>
+                          <ProfileCompletionBar
+                            percentage={emp.profileCompletion?.percentage || 0}
+                            size="small"
+                            showLabel={false}
+                          />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="employee-name">{emp.fullName}</div>
+                          <div className="employee-email">{emp.email}</div>
+                          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                            <span className="employee-badge">{emp.domain}</span>
+                            {emp.profileCompletion && (
+                              <span style={{
+                                fontSize: '0.75rem',
+                                padding: '0.125rem 0.5rem',
+                                borderRadius: '12px',
+                                background: emp.profileCompletion.percentage >= 70 ? 'rgba(16, 185, 129, 0.1)' :
+                                  emp.profileCompletion.percentage >= 30 ? 'rgba(245, 158, 11, 0.1)' :
+                                    'rgba(239, 68, 68, 0.1)',
+                                color: emp.profileCompletion.percentage >= 70 ? '#10b981' :
+                                  emp.profileCompletion.percentage >= 30 ? '#f59e0b' :
+                                    '#ef4444',
+                                fontWeight: '600'
+                              }}>
+                                {emp.profileCompletion.percentage}% Complete
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ))
                   )}
@@ -531,18 +574,163 @@ const AdminDashboard = () => {
                     </div>
 
                     {!isEditing ? (
-                      <div className="form-grid">
-                        {["fullName", "email", "company", "phone", "domain"].map((field) => (
-                          <div className="form-group" key={field}>
-                            <label className="form-label">
-                              {field.charAt(0).toUpperCase() + field.slice(1).replace(/([A-Z])/g, ' $1')}
-                            </label>
-                            <div className="form-value">
-                              {selectedEmployee[field] || "—"}
-                            </div>
+                      <>
+                        {/* Profile Completion Section */}
+                        {selectedEmployee.profileCompletion && (
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            padding: '1.5rem 0',
+                            borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+                            marginBottom: '1.5rem'
+                          }}>
+                            <ProfileCompletionBar
+                              percentage={selectedEmployee.profileCompletion.percentage}
+                              size="medium"
+                              showLabel={true}
+                            />
                           </div>
-                        ))}
-                        <div className="btn-group">
+                        )}
+
+                        {/* Basic Information */}
+                        <h3 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginBottom: '1rem', marginTop: '1rem' }}>
+                          👤 Basic Information
+                        </h3>
+                        <div className="form-grid">
+                          {["fullName", "email", "company", "phone", "domain"].map((field) => (
+                            <div className="form-group" key={field}>
+                              <label className="form-label">
+                                {field.charAt(0).toUpperCase() + field.slice(1).replace(/([A-Z])/g, ' $1')}
+                              </label>
+                              <div className="form-value">
+                                {selectedEmployee[field] || "—"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Additional Details - Only show if employee has submitted details */}
+                        {selectedEmployee.employeeDetails && (
+                          <>
+                            {/* Personal Information */}
+                            {(selectedEmployee.employeeDetails.dateOfBirth || selectedEmployee.employeeDetails.gender ||
+                              selectedEmployee.employeeDetails.maritalStatus || selectedEmployee.employeeDetails.bloodGroup) && (
+                                <>
+                                  <h3 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginBottom: '1rem', marginTop: '1.5rem' }}>
+                                    📋 Personal Information
+                                  </h3>
+                                  <div className="form-grid">
+                                    {selectedEmployee.employeeDetails.dateOfBirth && (
+                                      <div className="form-group">
+                                        <label className="form-label">Date of Birth</label>
+                                        <div className="form-value">
+                                          {new Date(selectedEmployee.employeeDetails.dateOfBirth).toLocaleDateString()}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {selectedEmployee.employeeDetails.gender && (
+                                      <div className="form-group">
+                                        <label className="form-label">Gender</label>
+                                        <div className="form-value">{selectedEmployee.employeeDetails.gender}</div>
+                                      </div>
+                                    )}
+                                    {selectedEmployee.employeeDetails.maritalStatus && (
+                                      <div className="form-group">
+                                        <label className="form-label">Marital Status</label>
+                                        <div className="form-value">{selectedEmployee.employeeDetails.maritalStatus}</div>
+                                      </div>
+                                    )}
+                                    {selectedEmployee.employeeDetails.bloodGroup && (
+                                      <div className="form-group">
+                                        <label className="form-label">Blood Group</label>
+                                        <div className="form-value">{selectedEmployee.employeeDetails.bloodGroup}</div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+
+                            {/* Contact & Address */}
+                            {selectedEmployee.employeeDetails.address && (
+                              <>
+                                <h3 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginBottom: '1rem', marginTop: '1.5rem' }}>
+                                  🏠 Address
+                                </h3>
+                                <div className="form-grid">
+                                  {selectedEmployee.employeeDetails.address.house && (
+                                    <div className="form-group">
+                                      <label className="form-label">House/Flat</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.address.house}</div>
+                                    </div>
+                                  )}
+                                  {selectedEmployee.employeeDetails.address.city && (
+                                    <div className="form-group">
+                                      <label className="form-label">City</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.address.city}</div>
+                                    </div>
+                                  )}
+                                  {selectedEmployee.employeeDetails.address.state && (
+                                    <div className="form-group">
+                                      <label className="form-label">State</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.address.state}</div>
+                                    </div>
+                                  )}
+                                  {selectedEmployee.employeeDetails.address.pincode && (
+                                    <div className="form-group">
+                                      <label className="form-label">Pincode</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.address.pincode}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+
+                            {/* Job Details */}
+                            {selectedEmployee.employeeDetails.jobDetails && (
+                              <>
+                                <h3 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginBottom: '1rem', marginTop: '1.5rem' }}>
+                                  💼 Job Details
+                                </h3>
+                                <div className="form-grid">
+                                  {selectedEmployee.employeeDetails.jobDetails.department && (
+                                    <div className="form-group">
+                                      <label className="form-label">Department</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.jobDetails.department}</div>
+                                    </div>
+                                  )}
+                                  {selectedEmployee.employeeDetails.jobDetails.designation && (
+                                    <div className="form-group">
+                                      <label className="form-label">Designation</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.jobDetails.designation}</div>
+                                    </div>
+                                  )}
+                                  {selectedEmployee.employeeDetails.jobDetails.dateOfJoining && (
+                                    <div className="form-group">
+                                      <label className="form-label">Date of Joining</label>
+                                      <div className="form-value">
+                                        {new Date(selectedEmployee.employeeDetails.jobDetails.dateOfJoining).toLocaleDateString()}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {selectedEmployee.employeeDetails.jobDetails.workLocation && (
+                                    <div className="form-group">
+                                      <label className="form-label">Work Location</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.jobDetails.workLocation}</div>
+                                    </div>
+                                  )}
+                                  {selectedEmployee.employeeDetails.jobDetails.employmentType && (
+                                    <div className="form-group">
+                                      <label className="form-label">Employment Type</label>
+                                      <div className="form-value">{selectedEmployee.employeeDetails.jobDetails.employmentType}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
+
+                        <div className="btn-group" style={{ marginTop: '2rem' }}>
                           <button
                             className="btn btn-danger"
                             onClick={() => deleteEmployee(selectedEmployee._id)}
@@ -550,7 +738,7 @@ const AdminDashboard = () => {
                             🗑️ Delete Employee
                           </button>
                         </div>
-                      </div>
+                      </>
                     ) : (
                       <div className="form-grid">
                         {["fullName", "email", "company", "phone", "domain"].map((field) => (
@@ -614,31 +802,32 @@ const AdminDashboard = () => {
               gap: "1rem",
               marginBottom: "2rem"
             }}>
-              <div className="stat-card">
-                <div className="stat-icon">📊</div>
-                <div className="stat-value">{allAttendance.length}</div>
-                <div className="stat-label">Total Records</div>
-              </div>
-              <div className="stat-card stat-success">
-                <div className="stat-icon">✅</div>
-                <div className="stat-value">
-                  {allAttendance.filter(a => a.status === "Present").length}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                gap: "1rem",
+                marginBottom: "2rem"
+              }}>
+                <div className="stat-card">
+                  <div className="stat-icon">📊</div>
+                  <div className="stat-value">{stats.totalAttendance}</div>
+                  <div className="stat-label">Total Records</div>
                 </div>
-                <div className="stat-label">Present</div>
-              </div>
-              <div className="stat-card stat-warning">
-                <div className="stat-icon">⏰</div>
-                <div className="stat-value">
-                  {allAttendance.filter(a => a.status === "Late").length}
+                <div className="stat-card stat-success">
+                  <div className="stat-icon">✅</div>
+                  <div className="stat-value">{stats.presentToday}</div>
+                  <div className="stat-label">Present Today</div>
                 </div>
-                <div className="stat-label">Late</div>
-              </div>
-              <div className="stat-card stat-danger">
-                <div className="stat-icon">❌</div>
-                <div className="stat-value">
-                  {allAttendance.filter(a => a.status === "Absent").length}
+                <div className="stat-card stat-warning">
+                  <div className="stat-icon">⏰</div>
+                  <div className="stat-value">{stats.lateToday}</div>
+                  <div className="stat-label">Late Today</div>
                 </div>
-                <div className="stat-label">Absent</div>
+                <div className="stat-card stat-danger">
+                  <div className="stat-icon">❌</div>
+                  <div className="stat-value">{stats.absentToday < 0 ? 0 : stats.absentToday}</div>
+                  <div className="stat-label">Absent Today</div>
+                </div>
               </div>
             </div>
 

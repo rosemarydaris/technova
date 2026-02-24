@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import LeaveApplicationModal from "../components/LeaveApplicationModal";
+import ConfirmationModal from "../components/ConfirmationModal";
 
 const Attendance = () => {
   const [todayStatus, setTodayStatus] = useState(null);
@@ -11,6 +12,8 @@ const Attendance = () => {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [myLeaves, setMyLeaves] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({ title: "", message: "", type: "primary", onConfirm: () => { } });
 
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -77,35 +80,55 @@ const Attendance = () => {
   };
 
   // ================= CHECK IN =================
-  const handleCheckIn = async () => {
-    try {
-      const res = await axios.post(
-        "http://localhost:5001/api/attendance/check-in",
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert(res.data.message);
-      fetchTodayStatus();
-      fetchAttendanceHistory();
-    } catch (err) {
-      alert(err.response?.data?.message || "Check-in failed");
-    }
+  const handleCheckIn = () => {
+    setConfirmConfig({
+      title: "Confirm Check In",
+      message: "Are you sure you want to Check In?",
+      type: "success",
+      onConfirm: async () => {
+        try {
+          const res = await axios.post(
+            "http://localhost:5001/api/attendance/check-in",
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          alert(res.data.message);
+          fetchTodayStatus();
+          fetchAttendanceHistory();
+          setShowConfirm(false);
+        } catch (err) {
+          alert(err.response?.data?.message || "Check-in failed");
+          setShowConfirm(false);
+        }
+      }
+    });
+    setShowConfirm(true);
   };
 
   // ================= CHECK OUT =================
-  const handleCheckOut = async () => {
-    try {
-      const res = await axios.post(
-        "http://localhost:5001/api/attendance/check-out",
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert(res.data.message);
-      fetchTodayStatus();
-      fetchAttendanceHistory();
-    } catch (err) {
-      alert(err.response?.data?.message || "Check-out failed");
-    }
+  const handleCheckOut = () => {
+    setConfirmConfig({
+      title: "Confirm Check Out",
+      message: "Are you sure you want to Check Out?",
+      type: "primary",
+      onConfirm: async () => {
+        try {
+          const res = await axios.post(
+            "http://localhost:5001/api/attendance/check-out",
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          alert(res.data.message);
+          fetchTodayStatus();
+          fetchAttendanceHistory();
+          setShowConfirm(false);
+        } catch (err) {
+          alert(err.response?.data?.message || "Check-out failed");
+          setShowConfirm(false);
+        }
+      }
+    });
+    setShowConfirm(true);
   };
 
   // ================= FORMAT DATE/TIME =================
@@ -375,6 +398,15 @@ const Attendance = () => {
           }}
         />
       )}
+
+      <ConfirmationModal
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        type={confirmConfig.type}
+      />
     </div>
   );
 };

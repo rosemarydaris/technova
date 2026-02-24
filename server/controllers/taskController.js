@@ -163,9 +163,60 @@ exports.getTasksByEmployee = async (req, res) => {
 // GET /api/tasks/all - Get all tasks (admin only)
 exports.getAllTasks = async (req, res) => {
   try {
-    const tasks = await Task.find()
-      .sort({ createdAt: -1 })
-      .limit(200); // Increased limit
+    const { domain } = req.query;
+
+    const pipeline = [
+      {
+        $lookup: {
+          from: "users",
+          localField: "assignedTo", // field in Task (email string)
+          foreignField: "email",    // field in User (email string)
+          as: "assigneeDetails"
+        }
+      },
+      {
+        $unwind: {
+          path: "$assigneeDetails",
+          preserveNullAndEmptyArrays: true // keep task even if user not found
+        }
+      },
+      {
+        $project: {
+          title: 1,
+          description: 1,
+          status: 1,
+          priority: 1,
+          dueDate: 1,
+          createdAt: 1,
+          completedAt: 1,
+          // We project the Full Object for assignedTo
+          assignedTo: {
+            // If user found, use it; else fallback to email string
+            $ifNull: ["$assigneeDetails", { email: "$assignedTo", fullName: "Unknown", domain: "N/A" }]
+          },
+          assignedBy: 1,
+          domain: 1, // Keep original domain if needed, but we prefer user domain usually?
+          // Don't need password
+
+        }
+      },
+      { $sort: { createdAt: -1 } }
+    ];
+
+    // Filter by Domain (either Task domain or User domain)
+    if (domain) {
+      const regex = new RegExp(`^${domain}$`, 'i');
+      pipeline.push({
+        $match: {
+          $or: [
+            { "assignedTo.domain": { $regex: regex } },
+            { domain: { $regex: regex } }
+          ]
+        }
+      });
+    }
+
+    const tasks = await Task.aggregate(pipeline);
 
     res.json(tasks);
   } catch (error) {

@@ -72,9 +72,7 @@ const Register = () => {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
-    if (!formData.agreeTerms) {
-      newErrors.agreeTerms = 'You must agree to the Terms of Service and Privacy Policy';
-    }
+// Removed agreeTerms validation as it's currently commented out in the UI
 
     setErrors(newErrors); // Update errors state
     return Object.keys(newErrors).length === 0; /// Return true if no errors
@@ -740,7 +738,7 @@ const Register = () => {
                 {errors.confirmPassword && <span className="error-message">{errors.confirmPassword}</span>}
               </div>
 
-              <div className="checkbox-wrapper">
+              {/* <div className="checkbox-wrapper">
                 <input
                   type="checkbox"
                   id="agreeTerms"
@@ -753,7 +751,7 @@ const Register = () => {
                   I agree to the <span>Terms of Service</span> and <span>Privacy Policy</span>
                 </label>
               </div>
-              {errors.agreeTerms && <span className="error-message">{errors.agreeTerms}</span>}
+              {errors.agreeTerms && <span className="error-message">{errors.agreeTerms}</span>} */}
 
               <button
                 type="submit"

@@ -5,8 +5,10 @@ import { useNavigate } from "react-router-dom";
 import {
   User, Mail, Briefcase, Phone, Calendar, Edit3,
   CheckCircle, X, LogOut, Bell, Clipboard, DollarSign,
-  Clock, MapPin, Shield, Camera
+  Clock, MapPin, Shield, Camera, Activity, PlayCircle, StopCircle
 } from "lucide-react";
+import ConfirmationModal from "../components/ConfirmationModal";
+import ProfileCompletionBar from "../components/ProfileCompletionBar";
 
 const EmployeeDashboard = () => {
   const [profile, setProfile] = useState(null);
@@ -27,10 +29,13 @@ const EmployeeDashboard = () => {
   const [payrollLoading, setPayrollLoading] = useState(false);
   const [selectedPayroll, setSelectedPayroll] = useState(null);
   const [showPayrollModal, setShowPayrollModal] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({ title: "", message: "", type: "primary", onConfirm: () => { } });
 
   // Employee Details State
   const [employeeDetails, setEmployeeDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [profileCompletion, setProfileCompletion] = useState(null);
   const [detailsFormData, setDetailsFormData] = useState({
     dateOfBirth: "",
     gender: "",
@@ -43,7 +48,7 @@ const EmployeeDashboard = () => {
     professional: { isFresher: true, previousCompany: "", yearsOfExperience: "", skills: "", lastJobRole: "", linkedIn: "", portfolio: "" },
     bankDetails: { bankName: "", accountNumber: "", ifscCode: "", branch: "", upiId: "" },
     salaryDetails: { basicSalary: "", hra: "", da: "", otherAllowances: "" },
-    jobDetails: { department: "", designation: "", dateOfJoining: "", workLocation: "", shiftTiming: "", employmentType: "" }
+    jobDetails: { department: "", designation: "", dateOfJoining: "", workLocation: "", shiftTiming: "", employmentType: "Full-time" }
   });
 
   // Leave State
@@ -58,7 +63,32 @@ const EmployeeDashboard = () => {
     reason: ""
   });
 
+  const [liveTime, setLiveTime] = useState("00:00:00");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let interval;
+    if (todayStatus?.checkIn && !todayStatus?.checkOut) {
+      interval = setInterval(() => {
+        const start = new Date(todayStatus.checkIn);
+        const now = new Date();
+        const diff = now - start;
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        setLiveTime(
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        );
+      }, 1000);
+    } else if (todayStatus?.workingHours) {
+      const h = Math.floor(todayStatus.workingHours);
+      const m = Math.round((todayStatus.workingHours - h) * 60);
+      setLiveTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`);
+    } else {
+      setLiveTime("00:00:00");
+    }
+    return () => clearInterval(interval);
+  }, [todayStatus]);
   const token = localStorage.getItem("token");
 
   useEffect(() => {
@@ -95,7 +125,7 @@ const EmployeeDashboard = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === "details") {
+    if (activeTab === "profile") {
       fetchEmployeeDetails();
     }
   }, [activeTab]);
@@ -259,34 +289,54 @@ const EmployeeDashboard = () => {
     }
   };
 
-  const handleCheckIn = async () => {
-    try {
-      const res = await axios.post(
-        "http://localhost:5001/api/attendance/check-in",
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert(res.data.message);
-      fetchTodayStatus();
-      fetchAttendanceHistory();
-    } catch (err) {
-      alert(err.response?.data?.message || "Check-in failed");
-    }
+  const handleCheckIn = () => {
+    setConfirmConfig({
+      title: "Confirm Check In",
+      message: "Are you sure you want to Check In?",
+      type: "success",
+      onConfirm: async () => {
+        try {
+          const res = await axios.post(
+            "http://localhost:5001/api/attendance/check-in",
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          alert(res.data.message);
+          fetchTodayStatus();
+          fetchAttendanceHistory();
+          setShowConfirm(false);
+        } catch (err) {
+          alert(err.response?.data?.message || "Check-in failed");
+          setShowConfirm(false);
+        }
+      }
+    });
+    setShowConfirm(true);
   };
 
-  const handleCheckOut = async () => {
-    try {
-      const res = await axios.post(
-        "http://localhost:5001/api/attendance/check-out",
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert(res.data.message);
-      fetchTodayStatus();
-      fetchAttendanceHistory();
-    } catch (err) {
-      alert(err.response?.data?.message || "Check-out failed");
-    }
+  const handleCheckOut = () => {
+    setConfirmConfig({
+      title: "Confirm Check Out",
+      message: "Are you sure you want to Check Out?",
+      type: "primary",
+      onConfirm: async () => {
+        try {
+          const res = await axios.post(
+            "http://localhost:5001/api/attendance/check-out",
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          alert(res.data.message);
+          fetchTodayStatus();
+          fetchAttendanceHistory();
+          setShowConfirm(false);
+        } catch (err) {
+          alert(err.response?.data?.message || "Check-out failed");
+          setShowConfirm(false);
+        }
+      }
+    });
+    setShowConfirm(true);
   };
 
   const fetchMyLeaves = async () => {
@@ -343,6 +393,12 @@ const EmployeeDashboard = () => {
       const res = await axios.get("http://localhost:5001/api/employee-details/me", {
         headers: { Authorization: `Bearer ${token}` }
       });
+
+      // Extract profile completion if available
+      if (res.data.profileCompletion) {
+        setProfileCompletion(res.data.profileCompletion);
+      }
+
       setEmployeeDetails(res.data);
       // Populate form with existing data
       setDetailsFormData({
@@ -361,6 +417,10 @@ const EmployeeDashboard = () => {
       });
     } catch (err) {
       console.log("No employee details found yet");
+      // If error response contains profile completion, set it
+      if (err.response?.data?.profileCompletion) {
+        setProfileCompletion(err.response.data.profileCompletion);
+      }
     } finally {
       setDetailsLoading(false);
     }
@@ -849,173 +909,6 @@ const EmployeeDashboard = () => {
           100% { background-position: 100% 100%; }
         }
 
-        .profile-hero-card { 
-          background: rgba(30, 41, 59, 0.4);
-          backdrop-filter: blur(20px);
-          border: 1px solid rgba(148, 163, 184, 0.1);
-          border-radius: 24px;
-          margin-bottom: 2.5rem;
-          overflow: hidden;
-          position: relative;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        }
-        
-        .profile-hero-gradient {
-          height: 220px;
-          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .mesh-overlay {
-          position: absolute;
-          inset: 0;
-          opacity: 0.6;
-          background-image: 
-            radial-gradient(at 20% 30%, #3b82f6 0px, transparent 50%),
-            radial-gradient(at 80% 20%, #8b5cf6 0px, transparent 50%),
-            radial-gradient(at 50% 80%, #ec4899 0px, transparent 50%);
-          filter: blur(60px);
-          animation: meshFlow 20s infinite alternate;
-        }
-
-        @keyframes meshFlow {
-          0% { transform: scale(1) translate(0, 0); }
-          50% { transform: scale(1.2) translate(5%, 5%); }
-          100% { transform: scale(1) translate(-5%, -5%); }
-        }
-        
-        .profile-hero-content {
-          padding: 0 2.5rem 2.5rem;
-          margin-top: -90px;
-          position: relative;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-        
-        .profile-hero-avatar-wrapper {
-          position: relative;
-          margin-bottom: 1.5rem;
-        }
-
-        .profile-hero-avatar {
-          width: 160px;
-          height: 160px;
-          border-radius: 50%;
-          padding: 6px;
-          background: linear-gradient(135deg, #3b82f6, #ec4899);
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-        }
-        
-        .profile-pic-hero {
-          width: 100%;
-          height: 100%;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 4px solid #1e293b;
-        }
-        
-        .profile-pic-placeholder-hero {
-          width: 100%;
-          height: 100%;
-          border-radius: 50%;
-          background: #1e293b;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 4rem;
-          color: #3b82f6;
-          font-weight: 700;
-          border: 4px solid #1e293b;
-        }
-        
-        .profile-status-indicator {
-          position: absolute;
-          bottom: 15px;
-          right: 15px;
-          width: 22px;
-          height: 22px;
-          background: #10b981;
-          border-radius: 50%;
-          border: 4px solid #1e293b;
-          box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
-        }
-        
-        .profile-hero-name {
-          font-size: 2.5rem;
-          color: #fff;
-          font-weight: 800;
-          margin-bottom: 0.25rem;
-          letter-spacing: -0.5px;
-        }
-        
-        .profile-hero-role {
-          font-size: 1.1rem;
-          color: #94a3b8;
-          font-weight: 500;
-          margin-bottom: 1.5rem;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-        }
-        
-        .profile-hero-badges {
-          display: flex;
-          gap: 0.75rem;
-          justify-content: center;
-          flex-wrap: wrap;
-        }
-        
-        .hero-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.6rem;
-          padding: 0.6rem 1.25rem;
-          background: rgba(15, 23, 42, 0.6);
-          backdrop-filter: blur(8px);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 100px;
-          color: #e2e8f0;
-          font-size: 0.9rem;
-          transition: all 0.3s ease;
-        }
-
-        .hero-badge:hover {
-          background: rgba(59, 130, 246, 0.15);
-          border-color: rgba(59, 130, 246, 0.3);
-          transform: translateY(-2px);
-        }
-        
-        .hero-badge-icon {
-          color: #3b82f6;
-        }
-        
-        .profile-edit-floating {
-          position: absolute;
-          top: 1.5rem;
-          right: 1.5rem;
-          width: 48px;
-          height: 48px;
-          background: rgba(255, 255, 255, 0.1);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
-          color: #fff;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          z-index: 10;
-        }
-        
-        .profile-edit-floating:hover {
-          background: #3b82f6;
-          transform: rotate(90deg);
-          box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-        }
-        
         .info-cards-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -1065,17 +958,69 @@ const EmployeeDashboard = () => {
           line-height: 1.4;
         }
 
-        .section-separator {
-          height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.2), transparent);
-          margin: 3rem 0;
+        .section-block {
+          background: rgba(15, 23, 42, 0.4);
+          border: 1px solid rgba(148, 163, 184, 0.1);
+          border-radius: 20px;
+          padding: 2rem;
+          margin-bottom: 2rem;
+        }
+        .section-header {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          margin-bottom: 2rem;
+          padding-bottom: 1rem;
+          border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .section-title-text {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #f1f5f9;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .info-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 2rem;
+        }
+        .info-item {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .info-label {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+        }
+        .info-value {
+          font-size: 1.1rem;
+          color: #e2e8f0;
+          font-weight: 500;
+        }
+        
+        .skill-tag {
+          padding: 0.5rem 1rem;
+          background: rgba(59, 130, 246, 0.1);
+          border: 1px solid rgba(59, 130, 246, 0.2);
+          border-radius: 8px;
+          color: #60a5fa;
+          font-size: 0.9rem;
+          font-weight: 600;
+          display: inline-block;
+          margin-right: 0.75rem;
+          margin-bottom: 0.75rem;
+          transition: all 0.3s ease;
+        }
+        .skill-tag:hover {
+          background: rgba(59, 130, 246, 0.2);
+          transform: translateY(-2px);
         }
 
-        .btn-group { 
-          display: flex; 
-          gap: 1rem; 
-          justify-content: center;
-        }
         
         .card { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem; }
         .card-title { font-size: 1.25rem; color: #f1f5f9; margin-bottom: 1rem; font-weight: 600; }
@@ -1115,6 +1060,324 @@ const EmployeeDashboard = () => {
           .sidebar { width: 100%; height: auto; position: relative; }
           .form-grid { grid-template-columns: 1fr; }
           .info-cards-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Enhanced Attendance UI */
+        .attendance-command-center {
+          display: grid;
+          grid-template-columns: 1fr 350px;
+          gap: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1200px) {
+          .attendance-command-center { grid-template-columns: 1fr; }
+        }
+
+        .attendance-stats-v2 {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 1.5rem;
+        }
+
+        .stat-card-v2 {
+          background: rgba(15, 23, 42, 0.4);
+          border: 1px solid rgba(148, 163, 184, 0.1);
+          border-radius: 20px;
+          padding: 1.5rem;
+          display: flex;
+          align-items: center;
+          gap: 1.25rem;
+          transition: all 0.3s ease;
+        }
+
+        .stat-card-v2:hover {
+          background: rgba(15, 23, 42, 0.6);
+          border-color: rgba(59, 130, 246, 0.3);
+          transform: translateY(-5px);
+        }
+
+        .stat-icon-v2 {
+          width: 50px;
+          height: 50px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(59, 130, 246, 0.1);
+          color: #3b82f6;
+        }
+
+        .stat-content-v2 {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .stat-label-v2 {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .stat-value-v2 {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #f1f5f9;
+        }
+
+        .command-action-zone {
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 24px;
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .command-action-zone::before {
+          content: '';
+          position: absolute;
+          top: -50%;
+          left: -50%;
+          width: 200%;
+          height: 200%;
+          background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+          pointer-events: none;
+        }
+
+        .live-status-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: rgba(15, 23, 42, 0.6);
+          border-radius: 100px;
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: #94a3b8;
+          margin-bottom: 1.5rem;
+          border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .status-pulse {
+          width: 8px;
+          height: 8px;
+          background: #10b981;
+          border-radius: 50%;
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+          70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .main-attendance-btn {
+          width: 120px;
+          height: 120px;
+          border-radius: 50%;
+          border: none;
+          background: linear-gradient(135deg, #3b82f6, #6366f1);
+          color: white;
+          font-weight: 800;
+          font-size: 1rem;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+          transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          margin-bottom: 1.5rem;
+          position: relative;
+          z-index: 1;
+        }
+
+        .main-attendance-btn:hover {
+          transform: scale(1.1);
+          box-shadow: 0 15px 35px rgba(59, 130, 246, 0.6);
+        }
+
+        .main-attendance-btn.check-out {
+          background: linear-gradient(135deg, #f43f5e, #e11d48);
+          box-shadow: 0 10px 25px rgba(244, 63, 94, 0.4);
+        }
+
+        .main-attendance-btn.check-out:hover {
+          box-shadow: 0 15px 35px rgba(244, 63, 94, 0.6);
+        }
+
+        .shift-timer {
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #f1f5f9;
+          letter-spacing: 2px;
+        }
+
+        /* Enhanced Tasks UI */
+        .tasks-overview-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1.5rem;
+          margin-bottom: 2.5rem;
+        }
+
+        .task-stat-card {
+          background: rgba(15, 23, 42, 0.4);
+          border: 1px solid rgba(148, 163, 184, 0.1);
+          border-radius: 20px;
+          padding: 1.5rem;
+          text-align: center;
+          transition: all 0.3s ease;
+        }
+
+        .task-stat-card:hover {
+          transform: translateY(-5px);
+          border-color: rgba(59, 130, 246, 0.3);
+          background: rgba(15, 23, 42, 0.6);
+        }
+
+        .task-stat-value {
+          font-size: 2rem;
+          font-weight: 800;
+          color: #f1f5f9;
+          margin-bottom: 0.25rem;
+          display: block;
+        }
+
+        .task-stat-label {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .professional-task-card {
+          background: rgba(30, 41, 59, 0.6);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(148, 163, 184, 0.1);
+          border-radius: 20px;
+          padding: 2rem;
+          margin-bottom: 1.5rem;
+          position: relative;
+          overflow: hidden;
+          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .professional-task-card:hover {
+          border-color: rgba(59, 130, 246, 0.3);
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .priority-indicator {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 6px;
+          height: 100%;
+        }
+
+        .task-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 1.5rem;
+        }
+
+        .task-card-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #f1f5f9;
+          margin-bottom: 0.5rem;
+        }
+
+        .task-card-desc {
+          color: #94a3b8;
+          font-size: 0.95rem;
+          line-height: 1.6;
+          margin-bottom: 1.5rem;
+        }
+
+        .task-badges-row {
+          display: flex;
+          gap: 1rem;
+          flex-wrap: wrap;
+          margin-bottom: 2rem;
+          padding-bottom: 1.5rem;
+          border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .professional-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          font-size: 0.8rem;
+          font-weight: 600;
+        }
+
+        .comment-thread {
+          background: rgba(15, 23, 42, 0.3);
+          border-radius: 12px;
+          padding: 1.25rem;
+          margin-top: 1.5rem;
+        }
+
+        .comment-item-v2 {
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 1.25rem;
+        }
+
+        .comment-avatar-v2 {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: #3b82f6;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: white;
+          flex-shrink: 0;
+        }
+
+        .comment-bubble-v2 {
+          flex: 1;
+          background: rgba(30, 41, 59, 0.7);
+          padding: 1rem;
+          border-radius: 12px;
+          border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .comment-meta-v2 {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 0.4rem;
+          font-size: 0.75rem;
+        }
+
+        .comment-author-v2 {
+          font-weight: 700;
+          color: #e2e8f0;
+        }
+
+        .comment-time-v2 {
+          color: #64748b;
         }
 
       `}</style>
@@ -1179,13 +1442,6 @@ const EmployeeDashboard = () => {
               <span className="nav-icon">🔔</span>
               Notifications
             </div>
-            <div
-              className={`nav-item ${activeTab === "details" ? "active" : ""}`}
-              onClick={() => setActiveTab("details")}
-            >
-              <span className="nav-icon">📝</span>
-              Additional Details
-            </div>
           </nav>
 
           <button className="logout-btn" onClick={handleLogout}>
@@ -1198,106 +1454,132 @@ const EmployeeDashboard = () => {
         <main className="main-content">
           {activeTab === "profile" && (
             <>
-              <div className="content-header">
-                <h1 className="page-title">My Profile</h1>
-                <p className="page-subtitle">View and manage your personal information</p>
+              <div className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2rem' }}>
+                <div>
+                  <h1 className="page-title">My Profile</h1>
+                  <p className="page-subtitle">View and manage your personal information</p>
+                </div>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  {!editMode && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => setEditMode(true)}
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                    >
+                      <Edit3 size={16} style={{ marginRight: '8px' }} />
+                      Edit Profile
+                    </button>
+                  )}
+                  {profileCompletion && (
+                    <div style={{ flexShrink: 0 }}>
+                      <ProfileCompletionBar
+                        percentage={profileCompletion.percentage}
+                        size="medium"
+                        showLabel={true}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Hero Profile Card */}
+              {/* Enhanced Professional Profile View */}
               {profile && (
-                <div className="profile-hero-card">
-                  <div className="profile-hero-gradient">
-                    <div className="mesh-overlay"></div>
-                  </div>
-                  <div className="profile-hero-content">
-                    {!editMode && (
-                      <button className="profile-edit-floating" onClick={() => setEditMode(true)} title="Edit Profile">
-                        <Edit3 size={20} />
-                      </button>
-                    )}
-                    <div className="profile-hero-avatar-wrapper">
-                      <div className="profile-hero-avatar">
-                        {profilePicUrl ? (
-                          <img src={profilePicUrl} alt="Profile" className="profile-pic-hero" />
-                        ) : (
-                          <div className="profile-pic-placeholder-hero">
-                            {profile.fullName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                      <div className="profile-status-indicator"></div>
-                    </div>
-
-                    <div className="profile-hero-info">
-                      <h2 className="profile-hero-name">{profile.fullName}</h2>
-                      <p className="profile-hero-role">{profile.domain || "Technova Member"}</p>
-
-                      <div className="profile-hero-badges">
-                        <span className="hero-badge">
-                          <Mail size={16} className="hero-badge-icon" />
-                          {profile.email}
-                        </span>
-                        {profile.phone && (
-                          <span className="hero-badge">
-                            <Phone size={16} className="hero-badge-icon" />
-                            {profile.phone}
-                          </span>
-                        )}
-                        <span className="hero-badge">
-                          <Calendar size={16} className="hero-badge-icon" />
-                          Joined {new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Information Cards Grid */}
-              {profile && (
-                <>
+                <div style={{ marginTop: '1rem' }}>
                   {!editMode ? (
-                    <div className="info-cards-grid">
-                      <div className="info-card glass-card">
-                        <div className="info-card-icon-wrapper" style={{ background: 'rgba(59, 130, 246, 0.1)' }}>
-                          <User size={24} color="#3b82f6" />
+                    <>
+                      <div className="section-block glass-card">
+                        <div className="section-header">
+                          <Briefcase className="text-primary" size={20} />
+                          <h3 className="section-title-text">Corporate Identity</h3>
                         </div>
-                        <div className="info-card-content">
-                          <label className="info-card-label">User Identity</label>
-                          <div className="info-card-value">{profile.fullName}</div>
+                        <div className="info-grid">
+                          <div className="info-item">
+                            <label className="info-label">Full Name</label>
+                            <div className="info-value">{profile.fullName}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Specialization</label>
+                            <div className="info-value">{profile.domain || "N/A"}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Corporate Email</label>
+                            <div className="info-value">{profile.email}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Department</label>
+                            <div className="info-value">{employeeDetails?.jobDetails?.department || "General"}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Designation</label>
+                            <div className="info-value">{employeeDetails?.jobDetails?.designation || "Member"}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Employment Type</label>
+                            <div className="info-value">{employeeDetails?.jobDetails?.employmentType || "Full-time"}</div>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="info-card glass-card">
-                        <div className="info-card-icon-wrapper" style={{ background: 'rgba(139, 92, 246, 0.1)' }}>
-                          <Mail size={24} color="#8b5cf6" />
+                      <div className="section-block glass-card">
+                        <div className="section-header">
+                          <User className="text-primary" size={20} />
+                          <h3 className="section-title-text">Personal Background</h3>
                         </div>
-                        <div className="info-card-content">
-                          <label className="info-card-label">Communication</label>
-                          <div className="info-card-value">{profile.email}</div>
+                        <div className="info-grid">
+                          <div className="info-item">
+                            <label className="info-label">Date of Birth</label>
+                            <div className="info-value">{employeeDetails?.dateOfBirth ? formatDate(employeeDetails.dateOfBirth) : "Not shared"}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Gender</label>
+                            <div className="info-value">{employeeDetails?.gender || "Not shared"}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Marital Status</label>
+                            <div className="info-value">{employeeDetails?.maritalStatus || "Not shared"}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Blood Group</label>
+                            <div className="info-value">{employeeDetails?.bloodGroup || "Not shared"}</div>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="info-card glass-card">
-                        <div className="info-card-icon-wrapper" style={{ background: 'rgba(236, 72, 153, 0.1)' }}>
-                          <Briefcase size={24} color="#ec4899" />
+                      <div className="section-block glass-card">
+                        <div className="section-header">
+                          <Phone className="text-primary" size={20} />
+                          <h3 className="section-title-text">Connectivity & Address</h3>
                         </div>
-                        <div className="info-card-content">
-                          <label className="info-card-label">Specialization</label>
-                          <div className="info-card-value">{profile.domain || "N/A"}</div>
+                        <div className="info-grid">
+                          <div className="info-item">
+                            <label className="info-label">Phone Connection</label>
+                            <div className="info-value">{profile.phone || "Not linked"}</div>
+                          </div>
+                          <div className="info-item">
+                            <label className="info-label">Current Address</label>
+                            <div className="info-value">
+                              {employeeDetails?.address ?
+                                `${employeeDetails.address.house}, ${employeeDetails.address.city}, ${employeeDetails.address.state} - ${employeeDetails.address.pincode}`
+                                : "No address registered"}
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="info-card glass-card">
-                        <div className="info-card-icon-wrapper" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
-                          <Phone size={24} color="#10b981" />
+                      {employeeDetails?.professional?.skills?.length > 0 && (
+                        <div className="section-block glass-card">
+                          <div className="section-header">
+                            <Shield className="text-primary" size={20} />
+                            <h3 className="section-title-text">Skills & Expertise</h3>
+                          </div>
+                          <div>
+                            {employeeDetails.professional.skills.map((skill, index) => (
+                              <span key={index} className="skill-tag">{skill}</span>
+                            ))}
+                          </div>
                         </div>
-                        <div className="info-card-content">
-                          <label className="info-card-label">Contact Line</label>
-                          <div className="info-card-value">{profile.phone || "Not linked"}</div>
-                        </div>
-                      </div>
-                    </div>
+                      )}
+                    </>
                   ) : (
                     <div className="edit-form-card glass-card">
                       <div className="edit-form-header">
@@ -1351,274 +1633,869 @@ const EmployeeDashboard = () => {
                       </div>
                     </div>
                   )}
-                </>
+
+
+                  {/* Additional Details Section - Merged from Details Tab */}
+                  <div style={{ marginTop: '2rem' }}>
+                    <div className="content-header" style={{ marginBottom: '1.5rem' }}>
+                      <h2 className="page-title" style={{ fontSize: '1.5rem' }}>Additional Details</h2>
+                      <p className="page-subtitle">Complete your profile for better experience</p>
+                    </div>
+
+                    {detailsLoading ? (
+                      <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                        <p>Loading details...</p>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSubmitEmployeeDetails}>
+                        {/* Personal & Address Information */}
+                        <div className="section-block glass-card">
+                          <div className="section-header">
+                            <User className="text-primary" size={20} />
+                            <h3 className="section-title-text">Personal & Address Information</h3>
+                          </div>
+                          <div className="form-grid">
+                            <div className="form-group">
+                              <label className="form-label">Date of Birth</label>
+                              <input
+                                type="date"
+                                className="form-input"
+                                value={detailsFormData.dateOfBirth}
+                                onChange={(e) => setDetailsFormData({ ...detailsFormData, dateOfBirth: e.target.value })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Gender</label>
+                              <select
+                                className="form-input"
+                                value={detailsFormData.gender}
+                                onChange={(e) => setDetailsFormData({ ...detailsFormData, gender: e.target.value })}
+                              >
+                                <option value="">Select Gender</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Marital Status</label>
+                              <select
+                                className="form-input"
+                                value={detailsFormData.maritalStatus}
+                                onChange={(e) => setDetailsFormData({ ...detailsFormData, maritalStatus: e.target.value })}
+                              >
+                                <option value="">Select Status</option>
+                                <option value="Single">Single</option>
+                                <option value="Married">Married</option>
+                                <option value="Divorced">Divorced</option>
+                                <option value="Widowed">Widowed</option>
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Blood Group</label>
+                              <select
+                                className="form-input"
+                                value={detailsFormData.bloodGroup}
+                                onChange={(e) => setDetailsFormData({ ...detailsFormData, bloodGroup: e.target.value })}
+                              >
+                                <option value="">Select Blood Group</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                              </select>
+                            </div>
+
+                            <div className="form-group">
+                              <label className="form-label">House/Flat No.</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.address.house}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  address: { ...detailsFormData.address, house: e.target.value }
+                                })}
+                                placeholder="Enter house/flat number"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">City</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.address.city}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  address: { ...detailsFormData.address, city: e.target.value }
+                                })}
+                                placeholder="Enter city"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">State</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.address.state}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  address: { ...detailsFormData.address, state: e.target.value }
+                                })}
+                                placeholder="Enter state"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Pincode</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.address.pincode}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  address: { ...detailsFormData.address, pincode: e.target.value }
+                                })}
+                                placeholder="Enter pincode"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+
+                        {/* Identification & Emergency */}
+                        <div className="section-block glass-card">
+                          <div className="section-header">
+                            <Shield className="text-primary" size={20} />
+                            <h3 className="section-title-text">Identification & Emergency</h3>
+                          </div>
+                          <div className="form-grid">
+                            <div className="form-group">
+                              <label className="form-label">National ID Type</label>
+                              <select
+                                className="form-input"
+                                value={detailsFormData.nationalId.type}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  nationalId: { ...detailsFormData.nationalId, type: e.target.value }
+                                })}
+                              >
+                                <option value="">Select ID Type</option>
+                                <option value="Aadhaar">Aadhaar Card</option>
+                                <option value="PAN">PAN Card</option>
+                                <option value="Passport">Passport</option>
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">ID Number</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.nationalId.number}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  nationalId: { ...detailsFormData.nationalId, number: e.target.value }
+                                })}
+                                placeholder="Enter ID number"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Emergency Contact Name</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.emergencyContact.name}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  emergencyContact: { ...detailsFormData.emergencyContact, name: e.target.value }
+                                })}
+                                placeholder="Enter contact name"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Emergency Phone</label>
+                              <input
+                                type="tel"
+                                className="form-input"
+                                value={detailsFormData.emergencyContact.phone}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  emergencyContact: { ...detailsFormData.emergencyContact, phone: e.target.value }
+                                })}
+                                placeholder="Enter phone number"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Relationship</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.emergencyContact.relationship}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  emergencyContact: { ...detailsFormData.emergencyContact, relationship: e.target.value }
+                                })}
+                                placeholder="e.g., Father, Spouse"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+
+                        {/* Education Details Section */}
+                        <div className="card">
+                          <h2 className="card-title">🎓 Education Details</h2>
+                          <div className="form-grid">
+                            <div className="form-group">
+                              <label className="form-label">Highest Qualification</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.education.highestQualification}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  education: { ...detailsFormData.education, highestQualification: e.target.value }
+                                })}
+                                placeholder="e.g., B.Tech, MBA, M.Sc"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Course/Degree</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.education.course}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  education: { ...detailsFormData.education, course: e.target.value }
+                                })}
+                                placeholder="e.g., Computer Science Engineering"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">University/College</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.education.university}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  education: { ...detailsFormData.education, university: e.target.value }
+                                })}
+                                placeholder="Enter university/college name"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Year of Passing</label>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={detailsFormData.education.yearOfPassing}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  education: { ...detailsFormData.education, yearOfPassing: e.target.value }
+                                })}
+                                placeholder="e.g., 2023"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Percentage/CGPA</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.education.percentage}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  education: { ...detailsFormData.education, percentage: e.target.value }
+                                })}
+                                placeholder="e.g., 85% or 8.5 CGPA"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Professional & Salary */}
+                        <div className="section-block glass-card">
+                          <div className="section-header">
+                            <Briefcase className="text-primary" size={20} />
+                            <h3 className="section-title-text">Experience & Financials</h3>
+                          </div>
+                          <div className="form-grid">
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                              <label className="form-label">Professional Summary & Skills</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.professional.skills}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  professional: { ...detailsFormData.professional, skills: e.target.value }
+                                })}
+                                placeholder="e.g., JavaScript, React, Leadership, SEO"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">LinkedIn Profile URL</label>
+                              <input
+                                type="url"
+                                className="form-input"
+                                value={detailsFormData.professional.linkedIn}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  professional: { ...detailsFormData.professional, linkedIn: e.target.value }
+                                })}
+                                placeholder="https://linkedin.com/in/username"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Portfolio URL</label>
+                              <input
+                                type="url"
+                                className="form-input"
+                                value={detailsFormData.professional.portfolio}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  professional: { ...detailsFormData.professional, portfolio: e.target.value }
+                                })}
+                                placeholder="https://yourportfolio.com"
+                              />
+                            </div>
+
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={detailsFormData.professional.isFresher}
+                                  onChange={(e) => setDetailsFormData({
+                                    ...detailsFormData,
+                                    professional: { ...detailsFormData.professional, isFresher: e.target.checked }
+                                  })}
+                                />
+                                I am a Fresher
+                              </label>
+                            </div>
+
+                            {!detailsFormData.professional.isFresher && (
+                              <>
+                                <div className="form-group">
+                                  <label className="form-label">Previous Company</label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={detailsFormData.professional.previousCompany}
+                                    onChange={(e) => setDetailsFormData({
+                                      ...detailsFormData,
+                                      professional: { ...detailsFormData.professional, previousCompany: e.target.value }
+                                    })}
+                                    placeholder="Enter previous company"
+                                  />
+                                </div>
+                                <div className="form-group">
+                                  <label className="form-label">Last Job Role</label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={detailsFormData.professional.lastJobRole}
+                                    onChange={(e) => setDetailsFormData({
+                                      ...detailsFormData,
+                                      professional: { ...detailsFormData.professional, lastJobRole: e.target.value }
+                                    })}
+                                    placeholder="Enter last role"
+                                  />
+                                </div>
+                              </>
+                            )}
+
+                            <div className="form-group">
+                              <label className="form-label">Total Years of Experience</label>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={detailsFormData.professional.yearsOfExperience}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  professional: { ...detailsFormData.professional, yearsOfExperience: e.target.value }
+                                })}
+                                placeholder="Years"
+                              />
+                            </div>
+
+                            <div className="form-group">
+                              <label className="form-label">Bank Name</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.bankDetails.bankName}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  bankDetails: { ...detailsFormData.bankDetails, bankName: e.target.value }
+                                })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Account Number</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.bankDetails.accountNumber}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  bankDetails: { ...detailsFormData.bankDetails, accountNumber: e.target.value }
+                                })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">IFSC Code</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.bankDetails.ifscCode}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  bankDetails: { ...detailsFormData.bankDetails, ifscCode: e.target.value }
+                                })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Branch Name</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.bankDetails.branch}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  bankDetails: { ...detailsFormData.bankDetails, branch: e.target.value }
+                                })}
+                                placeholder="Enter branch name"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">UPI ID</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.bankDetails.upiId}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  bankDetails: { ...detailsFormData.bankDetails, upiId: e.target.value }
+                                })}
+                                placeholder="username@upi"
+                              />
+                            </div>
+
+                          </div>
+                        </div>
+
+                        {/* Job Specifics */}
+                        <div className="section-block glass-card">
+                          <div className="section-header">
+                            <Shield className="text-primary" size={20} />
+                            <h3 className="section-title-text">Corporate Assignment</h3>
+                          </div>
+                          <div className="form-grid">
+                            <div className="form-group">
+                              <label className="form-label">Department</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.jobDetails.department}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  jobDetails: { ...detailsFormData.jobDetails, department: e.target.value }
+                                })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Designation</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.jobDetails.designation}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  jobDetails: { ...detailsFormData.jobDetails, designation: e.target.value }
+                                })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Work Location</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.jobDetails.workLocation}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  jobDetails: { ...detailsFormData.jobDetails, workLocation: e.target.value }
+                                })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Date of Joining</label>
+                              <input
+                                type="date"
+                                className="form-input"
+                                value={detailsFormData.jobDetails.dateOfJoining ? new Date(detailsFormData.jobDetails.dateOfJoining).toISOString().split('T')[0] : ""}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  jobDetails: { ...detailsFormData.jobDetails, dateOfJoining: e.target.value }
+                                })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Shift Timing</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                value={detailsFormData.jobDetails.shiftTiming}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  jobDetails: { ...detailsFormData.jobDetails, shiftTiming: e.target.value }
+                                })}
+                                placeholder="e.g., 9:00 AM - 6:00 PM"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">Employment Type</label>
+                              <select
+                                className="form-input"
+                                value={detailsFormData.jobDetails.employmentType}
+                                onChange={(e) => setDetailsFormData({
+                                  ...detailsFormData,
+                                  jobDetails: { ...detailsFormData.jobDetails, employmentType: e.target.value }
+                                })}
+                              >
+                                <option value="Full-time">Full-time</option>
+                                <option value="Part-time">Part-time</option>
+                                <option value="Contract">Contract</option>
+                                <option value="Intern">Intern</option>
+                              </select>
+                            </div>
+
+                          </div>
+                        </div>
+
+
+                        {/* Save Button */}
+                        <div className="btn-group" style={{ marginTop: '2rem' }}>
+                          <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={detailsLoading}
+                            style={{ minWidth: '200px' }}
+                          >
+                            {detailsLoading ? "Saving..." : employeeDetails ? "Update Details" : "Save Details"}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
               )}
             </>
           )}
+
 
           {activeTab === "attendance" && (
             <>
               <div className="content-header">
-                <h1 className="page-title">Attendance Tracker</h1>
-                <p className="page-subtitle">Track your daily attendance and working hours</p>
+                <h1 className="page-title">Attendance Command Center</h1>
+                <p className="page-subtitle">Real-time tracking and automated shift monitoring</p>
               </div>
 
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-label">Status</div>
-                  <div className="stat-value" style={{ fontSize: "1.25rem" }}>
-                    {todayStatus?.checkIn ? todayStatus.status : "Not Checked In"}
+              <div className="attendance-command-center">
+                <div className="attendance-stats-v2">
+                  <div className="stat-card-v2">
+                    <div className="stat-icon-v2">
+                      <Activity size={24} />
+                    </div>
+                    <div className="stat-content-v2">
+                      <span className="stat-label-v2">Daily Status</span>
+                      <span className="stat-value-v2" style={{ color: todayStatus?.checkIn ? '#10b981' : '#94a3b8' }}>
+                        {todayStatus?.checkIn ? todayStatus.status : "Waiting..."}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Check In</div>
-                  <div className="stat-value" style={{ fontSize: "1.25rem" }}>
-                    {formatTime(todayStatus?.checkIn)}
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Check Out</div>
-                  <div className="stat-value" style={{ fontSize: "1.25rem" }}>
-                    {formatTime(todayStatus?.checkOut)}
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Hours Worked</div>
-                  <div className="stat-value" style={{ fontSize: "1.25rem" }}>
-                    {todayStatus?.workingHours?.toFixed(2) || "0.00"} hrs
-                  </div>
-                </div>
-              </div>
 
-              <div className="card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                  <h2 className="card-title" style={{ margin: 0 }}>Attendance Controls</h2>
-                  <button className="btn btn-primary" onClick={() => setShowLeaveModal(true)}>
-                    <Calendar size={18} /> Apply for Leave
-                  </button>
+                  <div className="stat-card-v2">
+                    <div className="stat-icon-v2">
+                      <PlayCircle size={24} style={{ color: '#10b981' }} />
+                    </div>
+                    <div className="stat-content-v2">
+                      <span className="stat-label-v2">Check In Time</span>
+                      <span className="stat-value-v2">{formatTime(todayStatus?.checkIn) || "— : —"}</span>
+                    </div>
+                  </div>
+
+                  <div className="stat-card-v2">
+                    <div className="stat-icon-v2">
+                      <StopCircle size={24} style={{ color: '#f43f5e' }} />
+                    </div>
+                    <div className="stat-content-v2">
+                      <span className="stat-label-v2">Check Out Time</span>
+                      <span className="stat-value-v2">{formatTime(todayStatus?.checkOut) || "— : —"}</span>
+                    </div>
+                  </div>
+
+                  <div className="stat-card-v2">
+                    <div className="stat-icon-v2">
+                      <Clock size={24} style={{ color: '#fbbf24' }} />
+                    </div>
+                    <div className="stat-content-v2">
+                      <span className="stat-label-v2">Logged Hours</span>
+                      <span className="stat-value-v2">{todayStatus?.workingHours?.toFixed(2) || "0.00"} hrs</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="btn-group">
+
+                <div className="command-action-zone glass-card">
+                  <div className="live-status-badge">
+                    <div className="status-pulse" style={{ background: todayStatus?.checkIn && !todayStatus?.checkOut ? '#10b981' : '#94a3b8' }}></div>
+                    {todayStatus?.checkIn && !todayStatus?.checkOut ? "LIVE SESSION ACTIVE" : "SESSION INACTIVE"}
+                  </div>
+
                   {!todayStatus?.checkIn ? (
-                    <button className="btn btn-success" onClick={handleCheckIn}>
-                      ✓ Check In
+                    <button className="main-attendance-btn" onClick={handleCheckIn}>
+                      <PlayCircle size={40} />
+                      CHECK IN
                     </button>
                   ) : !todayStatus?.checkOut ? (
-                    <button className="btn btn-primary" onClick={handleCheckOut}>
-                      ✓ Check Out
+                    <button className="main-attendance-btn check-out" onClick={handleCheckOut}>
+                      <StopCircle size={40} />
+                      CHECK OUT
                     </button>
                   ) : (
-                    <div style={{ color: "#34d399", fontWeight: "600" }}>
-                      ✓ You've completed your work for today!
+                    <div className="main-attendance-btn" style={{ background: '#10b981', cursor: 'default' }}>
+                      <CheckCircle size={40} />
+                      DONE
                     </div>
                   )}
+
+                  <div className="shift-timer">
+                    {liveTime}
+                  </div>
+                  <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '1rem' }}>
+                    Current Shift Duration
+                  </p>
                 </div>
               </div>
 
-              <div className="content-header" style={{ marginTop: '2rem' }}>
-                <h2 className="page-title" style={{ fontSize: '1.5rem' }}>Leave Management</h2>
-                <p className="page-subtitle">View your leave balance and history</p>
-              </div>
+              <div className="section-block glass-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                  <div className="section-header" style={{ marginBottom: 0, border: 'none', padding: 0 }}>
+                    <Calendar className="text-primary" size={20} />
+                    <h3 className="section-title-text" style={{ margin: 0 }}>Leave Management</h3>
+                  </div>
+                  <button className="btn btn-primary" onClick={() => setShowLeaveModal(true)}>
+                    <Calendar size={18} /> Apply for New Leave
+                  </button>
+                </div>
 
-              <div className="stats-grid" style={{ gridTemplateColumns: '1fr' }}>
-                <div className="stat-card" style={{ borderLeft: '4px solid #f59e0b', padding: '2rem' }}>
-                  <div className="stat-label" style={{ fontSize: '1rem' }}>Total Leaves Taken</div>
-                  <div className="stat-value" style={{ fontSize: '3rem' }}>{leaveBalance.used}</div>
-                  <p style={{ color: '#94a3b8', marginTop: '0.5rem' }}>Calculated for the current calendar year</p>
+                <div className="info-grid">
+                  <div className="stat-card" style={{ borderLeft: '4px solid #f59e0b', background: 'rgba(245, 158, 11, 0.05)' }}>
+                    <div className="stat-label">Total Leaves Taken</div>
+                    <div className="stat-value" style={{ color: '#f59e0b' }}>{leaveBalance.used}</div>
+                    <p style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.5rem' }}>Current Calendar Year</p>
+                  </div>
+                  <div className="stat-card" style={{ borderLeft: '4px solid #3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>
+                    <div className="stat-label">Remaining Balance</div>
+                    <div className="stat-value" style={{ color: '#3b82f6' }}>{leaveBalance.remaining || 0}</div>
+                    <p style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.5rem' }}>Available for use</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="card">
-                <h2 className="card-title">Leave Requests History</h2>
-                {leaves.length === 0 ? (
-                  <p style={{ color: "#94a3b8", textAlign: "center", padding: "2rem" }}>No leave applications found.</p>
-                ) : (
-                  <table className="attendance-table">
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Start Date</th>
-                        <th>End Date</th>
-                        <th>Reason</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaves.map((leave) => (
-                        <tr key={leave._id}>
-                          <td>{leave.leaveType}</td>
-                          <td>{formatDate(leave.startDate)}</td>
-                          <td>{formatDate(leave.endDate)}</td>
-                          <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {leave.reason}
-                          </td>
-                          <td>
-                            <span className={`status-badge status-${leave.status.toLowerCase()}`}>
-                              {leave.status}
-                            </span>
-                          </td>
+              <div className="section-block glass-card">
+                <div className="section-header">
+                  <Activity className="text-primary" size={20} />
+                  <h3 className="section-title-text">Attendance & Leave History</h3>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                  <div>
+                    <h4 style={{ color: '#f1f5f9', marginBottom: '1rem' }}>Recent Attendance</h4>
+                    <table className="attendance-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>In / Out</th>
+                          <th>Hours</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                      </thead>
+                      <tbody>
+                        {attendanceHistory.slice(0, 5).map((record) => (
+                          <tr key={record._id}>
+                            <td style={{ fontSize: '0.85rem' }}>{formatDate(record.date)}</td>
+                            <td style={{ fontSize: '0.85rem' }}>{formatTime(record.checkIn)} - {formatTime(record.checkOut) || "—"}</td>
+                            <td style={{ fontSize: '0.85rem' }}>{record.workingHours?.toFixed(2) || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-              <div className="card">
-                <h2 className="card-title">Attendance History</h2>
-                <table className="attendance-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Check In</th>
-                      <th>Check Out</th>
-                      <th>Hours</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attendanceHistory.slice(0, 10).map((record) => (
-                      <tr key={record._id}>
-                        <td>{formatDate(record.date)}</td>
-                        <td>{formatTime(record.checkIn)}</td>
-                        <td>{formatTime(record.checkOut)}</td>
-                        <td>{record.workingHours?.toFixed(2) || "—"}</td>
-                        <td>
-                          <span className={`status-badge status-${record.status.toLowerCase().replace(" ", "")}`}>
-                            {record.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  <div>
+                    <h4 style={{ color: '#f1f5f9', marginBottom: '1rem' }}>Leave History</h4>
+                    <table className="attendance-table">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Duration</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaves.slice(0, 5).map((leave) => (
+                          <tr key={leave._id}>
+                            <td style={{ fontSize: '0.85rem' }}>{leave.leaveType}</td>
+                            <td style={{ fontSize: '0.85rem' }}>{formatDate(leave.startDate)}</td>
+                            <td>
+                              <span className={`status-badge status-${leave.status.toLowerCase()}`} style={{ fontSize: '0.75rem' }}>
+                                {leave.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </>
           )}
+
 
           {activeTab === "tasks" && (
             <>
               <div className="content-header">
-                <h1 className="page-title">📋 My Tasks</h1>
-                <p className="page-subtitle">View and manage your assigned tasks</p>
+                <h1 className="page-title">Task Management Center</h1>
+                <p className="page-subtitle">Track, update and collaborate on your delegated goals</p>
               </div>
 
               {tasksLoading ? (
-                <div className="card">
-                  <p style={{ color: "#94a3b8", textAlign: "center", padding: "2rem" }}>
-                    Loading tasks...
-                  </p>
+                <div style={{ textAlign: "center", padding: "4rem" }}>
+                  <div className="status-pulse" style={{ margin: "0 auto 1rem", width: '12px', height: '12px' }}></div>
+                  <p style={{ color: "#94a3b8" }}>Syncing your task board...</p>
                 </div>
               ) : tasks.length === 0 ? (
-                <div className="card">
-                  <div style={{ textAlign: "center", padding: "3rem" }}>
-                    <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>📝</div>
-                    <h3 style={{ color: "#f1f5f9", marginBottom: "0.5rem" }}>
-                      No Tasks Assigned
-                    </h3>
-                    <p style={{ color: "#94a3b8" }}>
-                      You don't have any tasks assigned to you yet
-                    </p>
-                  </div>
+                <div className="section-block glass-card" style={{ textAlign: "center", padding: "5rem" }}>
+                  <div style={{ fontSize: "4rem", marginBottom: "2rem", opacity: 0.5 }}>🎯</div>
+                  <h3 style={{ color: "#f1f5f9", fontSize: "1.5rem", marginBottom: "0.5rem" }}>Clear Horizon</h3>
+                  <p style={{ color: "#94a3b8" }}>You have no active tasks assigned at the moment.</p>
                 </div>
               ) : (
                 <>
-                  {tasks.map((task) => (
-                    <div key={task._id} className="task-card">
-                      <div className="task-header">
-                        <div style={{ flex: 1 }}>
-                          <h3 className="task-title">{task.title}</h3>
-                          <p className="task-description">{task.description}</p>
-                        </div>
-                      </div>
+                  {/* Tasks Overview Header */}
+                  <div className="tasks-overview-grid">
+                    <div className="task-stat-card">
+                      <span className="task-stat-value">{tasks.length}</span>
+                      <span className="task-stat-label">Total Assigned</span>
+                    </div>
+                    <div className="task-stat-card">
+                      <span className="task-stat-value" style={{ color: '#fbbf24' }}>
+                        {tasks.filter(t => t.status === 'Pending').length}
+                      </span>
+                      <span className="task-stat-label">Pending</span>
+                    </div>
+                    <div className="task-stat-card">
+                      <span className="task-stat-value" style={{ color: '#3b82f6' }}>
+                        {tasks.filter(t => t.status === 'In Progress').length}
+                      </span>
+                      <span className="task-stat-label">In Progress</span>
+                    </div>
+                    <div className="task-stat-card">
+                      <span className="task-stat-value" style={{ color: '#10b981' }}>
+                        {tasks.filter(t => t.status === 'Completed').length}
+                      </span>
+                      <span className="task-stat-label">Completed</span>
+                    </div>
+                  </div>
 
-                      <div className="task-meta">
-                        <span
-                          className="status-badge"
-                          style={{
-                            background: getStatusColor(task.status).bg,
-                            color: getStatusColor(task.status).color
-                          }}
-                        >
-                          {task.status}
-                        </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' }}>
+                    {tasks.map((task) => {
+                      const priorityColor = task.priority === 'High' ? '#f43f5e' : task.priority === 'Medium' ? '#fbbf24' : '#3b82f6';
+                      return (
+                        <div key={task._id} className="professional-task-card">
+                          <div className="priority-indicator" style={{ background: priorityColor }}></div>
 
-                        {task.priority && (
-                          <span
-                            className="status-badge"
-                            style={{
-                              background: getPriorityColor(task.priority).bg,
-                              color: getPriorityColor(task.priority).color
-                            }}
-                          >
-                            {task.priority} Priority
-                          </span>
-                        )}
-
-                        {task.dueDate && (
-                          <span style={{ color: "#94a3b8", fontSize: "0.85rem", padding: "0.3rem 0.8rem" }}>
-                            📅 Due: {formatDate(task.dueDate)}
-                          </span>
-                        )}
-
-                        {task.domain && (
-                          <span style={{
-                            color: "#94a3b8",
-                            fontSize: "0.85rem",
-                            padding: "0.3rem 0.8rem",
-                            background: "rgba(148,163,184,0.1)",
-                            borderRadius: "20px"
-                          }}>
-                            {task.domain}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="form-group" style={{ marginTop: "1rem" }}>
-                        <label className="form-label">Update Status</label>
-                        <select
-                          className="form-input"
-                          value={task.status}
-                          onChange={(e) => updateTaskStatus(task._id, e.target.value)}
-                          style={{ maxWidth: "250px" }}
-                        >
-                          <option>Pending</option>
-                          <option>In Progress</option>
-                          <option>Completed</option>
-                        </select>
-                      </div>
-
-                      {task.comments && task.comments.length > 0 && (
-                        <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid rgba(148,163,184,0.1)" }}>
-                          <h4 style={{ color: "#f1f5f9", fontSize: "0.95rem", marginBottom: "0.5rem" }}>
-                            💬 Comments ({task.comments.length})
-                          </h4>
-                          {task.comments.map((comment, idx) => (
-                            <div
-                              key={idx}
+                          <div className="task-card-header">
+                            <div>
+                              <h3 className="task-card-title">{task.title}</h3>
+                              <p className="task-card-desc">{task.description}</p>
+                            </div>
+                            <select
+                              className="form-input"
+                              value={task.status}
+                              onChange={(e) => updateTaskStatus(task._id, e.target.value)}
                               style={{
-                                background: "rgba(15, 23, 42, 0.5)",
-                                padding: "0.75rem",
-                                borderRadius: "8px",
-                                marginTop: "0.5rem",
-                                borderLeft: "3px solid #6366f1"
+                                width: 'auto',
+                                padding: '0.4rem 0.8rem',
+                                fontSize: '0.8rem',
+                                background: 'rgba(15, 23, 42, 0.6)',
+                                borderRadius: '8px'
                               }}
                             >
-                              <p style={{ color: "#cbd5e1", fontSize: "0.9rem", margin: 0 }}>
-                                {comment.text}
-                              </p>
-                              <small style={{ color: "#64748b", fontSize: "0.75rem" }}>
-                                By {comment.addedBy} • {new Date(comment.addedAt).toLocaleString()}
-                              </small>
+                              <option>Pending</option>
+                              <option>In Progress</option>
+                              <option>Completed</option>
+                            </select>
+                          </div>
+
+                          <div className="task-badges-row">
+                            <div className="professional-badge" style={{ background: 'rgba(148, 163, 184, 0.1)', color: '#94a3b8' }}>
+                              <Calendar size={14} />
+                              <span>Due: {formatDate(task.dueDate)}</span>
                             </div>
-                          ))}
+                            <div className="professional-badge" style={{
+                              background: `${priorityColor}15`,
+                              color: priorityColor,
+                              border: `1px solid ${priorityColor}30`
+                            }}>
+                              <Shield size={14} />
+                              <span>{task.priority} Priority</span>
+                            </div>
+                            {task.domain && (
+                              <div className="professional-badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa' }}>
+                                <Briefcase size={14} />
+                                <span>{task.domain}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {task.comments && task.comments.length > 0 && (
+                            <div className="comment-thread">
+                              <h4 style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '1px' }}>
+                                Activity & Discussion
+                              </h4>
+                              {task.comments.map((comment, idx) => (
+                                <div key={idx} className="comment-item-v2">
+                                  <div className="comment-avatar-v2">
+                                    {comment.addedBy.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="comment-bubble-v2">
+                                    <div className="comment-meta-v2">
+                                      <span className="comment-author-v2">{comment.addedBy}</span>
+                                      <span className="comment-time-v2">{new Date(comment.addedAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <p style={{ color: '#cbd5e1', fontSize: '0.9rem', margin: 0 }}>
+                                      {comment.text}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    })}
+                  </div>
                 </>
               )}
             </>
           )}
+
 
           {activeTab === "payroll" && (
             <>
@@ -1976,666 +2853,33 @@ const EmployeeDashboard = () => {
         </div>
       )}
 
-      {/* EMPLOYEE DETAILS TAB */}
-      {activeTab === "details" && (
-        <>
-          <div className="content-header">
-            <h1 className="page-title">📝 Additional Employee Details</h1>
-            <p className="page-subtitle">Complete your comprehensive employee profile</p>
-          </div>
-
-          {detailsLoading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
-              <p>Loading employee details...</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmitEmployeeDetails}>
-              {/* Personal Information Section */}
-              <div className="card">
-                <h2 className="card-title">👤 Personal Information</h2>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">Date of Birth</label>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={detailsFormData.dateOfBirth}
-                      onChange={(e) => setDetailsFormData({ ...detailsFormData, dateOfBirth: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Gender</label>
-                    <select
-                      className="form-input"
-                      value={detailsFormData.gender}
-                      onChange={(e) => setDetailsFormData({ ...detailsFormData, gender: e.target.value })}
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Marital Status</label>
-                    <select
-                      className="form-input"
-                      value={detailsFormData.maritalStatus}
-                      onChange={(e) => setDetailsFormData({ ...detailsFormData, maritalStatus: e.target.value })}
-                    >
-                      <option value="">Select Status</option>
-                      <option value="Single">Single</option>
-                      <option value="Married">Married</option>
-                      <option value="Divorced">Divorced</option>
-                      <option value="Widowed">Widowed</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Blood Group</label>
-                    <select
-                      className="form-input"
-                      value={detailsFormData.bloodGroup}
-                      onChange={(e) => setDetailsFormData({ ...detailsFormData, bloodGroup: e.target.value })}
-                    >
-                      <option value="">Select Blood Group</option>
-                      <option value="A+">A+</option>
-                      <option value="A-">A-</option>
-                      <option value="B+">B+</option>
-                      <option value="B-">B-</option>
-                      <option value="AB+">AB+</option>
-                      <option value="AB-">AB-</option>
-                      <option value="O+">O+</option>
-                      <option value="O-">O-</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Address Details Section */}
-              <div className="card">
-                <h2 className="card-title">🏠 Address Details</h2>
-                <div className="form-grid">
-                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                    <label className="form-label">House/Flat No., Street</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.address.house}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        address: { ...detailsFormData.address, house: e.target.value }
-                      })}
-                      placeholder="Enter house/flat number and street"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">City</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.address.city}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        address: { ...detailsFormData.address, city: e.target.value }
-                      })}
-                      placeholder="Enter city"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">State</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.address.state}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        address: { ...detailsFormData.address, state: e.target.value }
-                      })}
-                      placeholder="Enter state"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Pincode</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.address.pincode}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        address: { ...detailsFormData.address, pincode: e.target.value }
-                      })}
-                      placeholder="Enter pincode"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* National ID Section */}
-              <div className="card">
-                <h2 className="card-title">🆔 National ID Proof</h2>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">ID Type</label>
-                    <select
-                      className="form-input"
-                      value={detailsFormData.nationalId.type}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        nationalId: { ...detailsFormData.nationalId, type: e.target.value }
-                      })}
-                    >
-                      <option value="">Select ID Type</option>
-                      <option value="Aadhaar">Aadhaar</option>
-                      <option value="PAN">PAN</option>
-                      <option value="Passport">Passport</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">ID Number</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.nationalId.number}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        nationalId: { ...detailsFormData.nationalId, number: e.target.value }
-                      })}
-                      placeholder="Enter ID number"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Emergency Contact Section */}
-              <div className="card">
-                <h2 className="card-title">🚨 Emergency Contact</h2>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">Contact Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.emergencyContact.name}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        emergencyContact: { ...detailsFormData.emergencyContact, name: e.target.value }
-                      })}
-                      placeholder="Enter emergency contact name"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Contact Phone</label>
-                    <input
-                      type="tel"
-                      className="form-input"
-                      value={detailsFormData.emergencyContact.phone}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        emergencyContact: { ...detailsFormData.emergencyContact, phone: e.target.value }
-                      })}
-                      placeholder="Enter emergency contact phone"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Relationship</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.emergencyContact.relationship}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        emergencyContact: { ...detailsFormData.emergencyContact, relationship: e.target.value }
-                      })}
-                      placeholder="e.g., Father, Mother, Spouse"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Education Details Section */}
-              <div className="card">
-                <h2 className="card-title">🎓 Education Details</h2>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">Highest Qualification</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.education.highestQualification}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        education: { ...detailsFormData.education, highestQualification: e.target.value }
-                      })}
-                      placeholder="e.g., B.Tech, MBA, M.Sc"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Course/Degree</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.education.course}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        education: { ...detailsFormData.education, course: e.target.value }
-                      })}
-                      placeholder="e.g., Computer Science Engineering"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">University/College</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.education.university}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        education: { ...detailsFormData.education, university: e.target.value }
-                      })}
-                      placeholder="Enter university/college name"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Year of Passing</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={detailsFormData.education.yearOfPassing}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        education: { ...detailsFormData.education, yearOfPassing: e.target.value }
-                      })}
-                      placeholder="e.g., 2023"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Percentage/CGPA</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.education.percentage}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        education: { ...detailsFormData.education, percentage: e.target.value }
-                      })}
-                      placeholder="e.g., 85% or 8.5 CGPA"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Professional Details Section */}
-              <div className="card">
-                <h2 className="card-title">💼 Professional Details</h2>
-                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#cbd5e1', fontSize: '0.95rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={detailsFormData.professional.isFresher}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        professional: { ...detailsFormData.professional, isFresher: e.target.checked }
-                      })}
-                      style={{ width: '18px', height: '18px' }}
-                    />
-                    I am a fresher (no prior work experience)
-                  </label>
-                </div>
-
-                {!detailsFormData.professional.isFresher && (
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label className="form-label">Previous Company</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={detailsFormData.professional.previousCompany}
-                        onChange={(e) => setDetailsFormData({
-                          ...detailsFormData,
-                          professional: { ...detailsFormData.professional, previousCompany: e.target.value }
-                        })}
-                        placeholder="Enter previous company name"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Years of Experience</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={detailsFormData.professional.yearsOfExperience}
-                        onChange={(e) => setDetailsFormData({
-                          ...detailsFormData,
-                          professional: { ...detailsFormData.professional, yearsOfExperience: e.target.value }
-                        })}
-                        placeholder="e.g., 3"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Last Job Role</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={detailsFormData.professional.lastJobRole}
-                        onChange={(e) => setDetailsFormData({
-                          ...detailsFormData,
-                          professional: { ...detailsFormData.professional, lastJobRole: e.target.value }
-                        })}
-                        placeholder="e.g., Senior Developer"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="form-grid" style={{ marginTop: '1rem' }}>
-                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                    <label className="form-label">Skills (comma-separated)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.professional.skills}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        professional: { ...detailsFormData.professional, skills: e.target.value }
-                      })}
-                      placeholder="e.g., JavaScript, React, Node.js, MongoDB"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">LinkedIn Profile</label>
-                    <input
-                      type="url"
-                      className="form-input"
-                      value={detailsFormData.professional.linkedIn}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        professional: { ...detailsFormData.professional, linkedIn: e.target.value }
-                      })}
-                      placeholder="https://linkedin.com/in/yourprofile"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Portfolio Link</label>
-                    <input
-                      type="url"
-                      className="form-input"
-                      value={detailsFormData.professional.portfolio}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        professional: { ...detailsFormData.professional, portfolio: e.target.value }
-                      })}
-                      placeholder="https://yourportfolio.com"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Bank Details Section */}
-              <div className="card">
-                <h2 className="card-title">🏦 Bank & Salary Details</h2>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">Bank Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.bankDetails.bankName}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        bankDetails: { ...detailsFormData.bankDetails, bankName: e.target.value }
-                      })}
-                      placeholder="Enter bank name"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Account Number</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.bankDetails.accountNumber}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        bankDetails: { ...detailsFormData.bankDetails, accountNumber: e.target.value }
-                      })}
-                      placeholder="Enter account number"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">IFSC Code</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.bankDetails.ifscCode}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        bankDetails: { ...detailsFormData.bankDetails, ifscCode: e.target.value }
-                      })}
-                      placeholder="Enter IFSC code"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Branch</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.bankDetails.branch}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        bankDetails: { ...detailsFormData.bankDetails, branch: e.target.value }
-                      })}
-                      placeholder="Enter branch name"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">UPI ID (Optional)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.bankDetails.upiId}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        bankDetails: { ...detailsFormData.bankDetails, upiId: e.target.value }
-                      })}
-                      placeholder="yourname@upi"
-                    />
-                  </div>
-                </div>
-
-                <h3 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginTop: '1.5rem', marginBottom: '1rem' }}>Salary Components</h3>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">Basic Salary</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={detailsFormData.salaryDetails.basicSalary}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        salaryDetails: { ...detailsFormData.salaryDetails, basicSalary: e.target.value }
-                      })}
-                      placeholder="Enter basic salary"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">HRA</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={detailsFormData.salaryDetails.hra}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        salaryDetails: { ...detailsFormData.salaryDetails, hra: e.target.value }
-                      })}
-                      placeholder="House Rent Allowance"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">DA</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={detailsFormData.salaryDetails.da}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        salaryDetails: { ...detailsFormData.salaryDetails, da: e.target.value }
-                      })}
-                      placeholder="Dearness Allowance"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Other Allowances</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={detailsFormData.salaryDetails.otherAllowances}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        salaryDetails: { ...detailsFormData.salaryDetails, otherAllowances: e.target.value }
-                      })}
-                      placeholder="Other allowances"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Job Details Section */}
-              <div className="card">
-                <h2 className="card-title">💻 Job Details</h2>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">Department</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.jobDetails.department}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        jobDetails: { ...detailsFormData.jobDetails, department: e.target.value }
-                      })}
-                      placeholder="e.g., Engineering, HR, Sales"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Designation</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.jobDetails.designation}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        jobDetails: { ...detailsFormData.jobDetails, designation: e.target.value }
-                      })}
-                      placeholder="e.g., Software Engineer, Manager"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Date of Joining</label>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={detailsFormData.jobDetails.dateOfJoining}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        jobDetails: { ...detailsFormData.jobDetails, dateOfJoining: e.target.value }
-                      })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Work Location</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.jobDetails.workLocation}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        jobDetails: { ...detailsFormData.jobDetails, workLocation: e.target.value }
-                      })}
-                      placeholder="e.g., Bangalore, Remote"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Shift Timing</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={detailsFormData.jobDetails.shiftTiming}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        jobDetails: { ...detailsFormData.jobDetails, shiftTiming: e.target.value }
-                      })}
-                      placeholder="e.g., 9 AM - 6 PM"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Employment Type</label>
-                    <select
-                      className="form-input"
-                      value={detailsFormData.jobDetails.employmentType}
-                      onChange={(e) => setDetailsFormData({
-                        ...detailsFormData,
-                        jobDetails: { ...detailsFormData.jobDetails, employmentType: e.target.value }
-                      })}
-                    >
-                      <option value="">Select Employment Type</option>
-                      <option value="Full-time">Full-time</option>
-                      <option value="Part-time">Part-time</option>
-                      <option value="Contract">Contract</option>
-                      <option value="Intern">Intern</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="btn-group" style={{ marginTop: '2rem' }}>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={detailsLoading}
-                  style={{ minWidth: '200px' }}
-                >
-                  {detailsLoading ? "Submitting..." : employeeDetails ? "Update Details" : "Submit Details"}
-                </button>
-              </div>
-            </form>
-          )}
-        </>
-      )}
-
       {/* LEAVE APPLICATION MODAL */}
       {showLeaveModal && (
         <div className="modal-overlay">
-          <div className="modal-content glass-card" style={{ maxWidth: '500px' }}>
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
             <div className="edit-form-header">
-              <h2 className="edit-form-title">
-                <Calendar size={24} style={{ marginRight: '10px', verticalAlign: 'middle', color: '#3b82f6' }} />
-                Apply for Leave
-              </h2>
-              <button
-                onClick={() => setShowLeaveModal(false)}
-                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
-              >
+              <h2 className="edit-form-title">Apply for Leave</h2>
+              <button onClick={() => setShowLeaveModal(false)} className="btn-icon">
                 <X size={24} />
               </button>
             </div>
-
             <form onSubmit={handleApplyLeave}>
-              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label className="form-label">Leave Type</label>
-                <select
-                  className="form-input"
-                  value={leaveFormData.leaveType}
-                  onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
-                  required
-                >
-                  <option value="Sick">Sick Leave</option>
-                  <option value="Casual">Casual Leave</option>
-                  <option value="Annual">Annual Leave</option>
-                  <option value="Unpaid">Unpaid Leave</option>
-                  <option value="Half Day">Half Day</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="form-label">Leave Type</label>
+                  <select
+                    className="form-input"
+                    value={leaveFormData.leaveType}
+                    onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
+                    required
+                  >
+                    <option value="Sick">Sick Leave</option>
+                    <option value="Casual">Casual Leave</option>
+                    <option value="Annual">Annual Leave</option>
+                    <option value="Half Day">Half Day</option>
+                    <option value="Unpaid">Unpaid Leave</option>
+                  </select>
+                </div>
                 <div className="form-group">
                   <label className="form-label">Start Date</label>
                   <input
@@ -2657,25 +2901,22 @@ const EmployeeDashboard = () => {
                   />
                 </div>
               </div>
-
               <div className="form-group" style={{ marginBottom: '2rem' }}>
                 <label className="form-label">Reason</label>
                 <textarea
                   className="form-input"
-                  rows="3"
+                  style={{ minHeight: '100px', resize: 'vertical' }}
                   value={leaveFormData.reason}
                   onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
-                  placeholder="Describe your reason for leave..."
+                  placeholder="Please provide a reason for your leave request..."
                   required
-                  style={{ resize: 'none' }}
                 />
               </div>
-
-              <div className="btn-group" style={{ justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                 <button
                   type="button"
-                  className="btn btn-secondary"
                   onClick={() => setShowLeaveModal(false)}
+                  className="btn btn-secondary"
                 >
                   Cancel
                 </button>
@@ -2691,6 +2932,15 @@ const EmployeeDashboard = () => {
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        type={confirmConfig.type}
+      />
     </>
   );
 };

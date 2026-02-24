@@ -2,6 +2,8 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
+const Employee = require("../models/employee");
+const { calculateProfileCompletion } = require("../utils/profileCompletionUtils");
 const jwt = require("jsonwebtoken");
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
@@ -80,6 +82,61 @@ router.get("/all", authenticate, async (req, res) => {
     res.json(users);
   } catch (err) {
     console.error("❌ Error fetching all employees:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ GET all employees with complete details and profile completion (Admin)
+router.get("/with-details", authenticate, async (req, res) => {
+  try {
+    // Get all non-admin users
+    const users = await User.find({ isAdmin: false }).select("-password");
+
+    // For each user, fetch their employee details and calculate completion
+    const employeesWithDetails = await Promise.all(
+      users.map(async (user) => {
+        try {
+          // Find employee details for this user
+          const employeeDetails = await Employee.findOne({ userId: user._id });
+
+          // Calculate profile completion
+          const completion = calculateProfileCompletion(user, employeeDetails);
+
+          return {
+            _id: user._id,
+            fullName: user.fullName,
+            email: user.email,
+            phone: user.phone,
+            domain: user.domain,
+            company: user.company,
+            createdAt: user.createdAt,
+            profileCompletion: completion,
+            hasAdditionalDetails: !!employeeDetails,
+            employeeDetails: employeeDetails || null
+          };
+        } catch (err) {
+          console.error(`Error processing user ${user._id}:`, err);
+          // Return basic user info with minimal completion if error occurs
+          const completion = calculateProfileCompletion(user, null);
+          return {
+            _id: user._id,
+            fullName: user.fullName,
+            email: user.email,
+            phone: user.phone,
+            domain: user.domain,
+            company: user.company,
+            createdAt: user.createdAt,
+            profileCompletion: completion,
+            hasAdditionalDetails: false,
+            employeeDetails: null
+          };
+        }
+      })
+    );
+
+    res.json(employeesWithDetails);
+  } catch (err) {
+    console.error("❌ Error fetching employees with details:", err);
     res.status(500).json({ message: err.message });
   }
 });

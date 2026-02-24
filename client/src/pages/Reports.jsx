@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import * as XLSX from "xlsx";
+import { Link, useNavigate } from "react-router-dom";
 import {
     BarChart,
     Bar,
@@ -14,135 +15,267 @@ import {
     Pie,
     Cell,
 } from "recharts";
-import { Link, useNavigate } from "react-router-dom"; // Add Navigation
-import { useUser } from "../context/UserContext"; // Assuming we might need context, though mostly fetching
+const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
 const Reports = () => {
-    const navigate = useNavigate(); // Hook for navigation
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("employee");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    // Filters
+    const [selectedDomain, setSelectedDomain] = useState("All");
+    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
     // Data States
+    const [stats, setStats] = useState({
+        totalEmployees: 0,
+        presentToday: 0,
+        pendingTasks: 0,
+        totalPayroll: 0
+    });
     const [employees, setEmployees] = useState([]);
     const [attendance, setAttendance] = useState([]);
-    const [attendanceSummary, setAttendanceSummary] = useState({});
     const [tasks, setTasks] = useState([]);
-    const [taskStats, setTaskStats] = useState({});
     const [payrolls, setPayrolls] = useState([]);
-    const [payrollSummary, setPayrollSummary] = useState({});
 
-    const [logs, setLogs] = useState([]);
+    // Constants
+    const DOMAINS = ["All", "HR", "MANAGER", "DEVELOPER", "TESTER", "DESIGNER"]; // Strict domains as requested
+    const MONTHS = [
+        { value: 1, label: "January" }, { value: 2, label: "February" }, { value: 3, label: "March" },
+        { value: 4, label: "April" }, { value: 5, label: "May" }, { value: 6, label: "June" },
+        { value: 7, label: "July" }, { value: 8, label: "August" }, { value: 9, label: "September" },
+        { value: 10, label: "October" }, { value: 11, label: "November" }, { value: 12, label: "December" }
+    ];
+    const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
     const token = localStorage.getItem("token");
     const config = {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` }
     };
 
+    // Initial Load - Stats
     useEffect(() => {
-        fetchData();
-    }, [activeTab]);
+        fetchStats();
+    }, [selectedMonth, selectedYear]); // Re-fetch payroll stats if month/year changes
 
-    const fetchData = async () => {
+    // Data Load - Tab specific
+    useEffect(() => {
+        fetchReportData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, selectedDomain, selectedMonth, selectedYear]);
+
+    const fetchStats = async () => {
+        try {
+            const res = await axios.get("http://localhost:5001/api/admin/stats/summary", {
+                ...config,
+                params: { month: selectedMonth, year: selectedYear }
+            });
+            setStats(res.data);
+        } catch (err) {
+            console.error("Error fetching stats:", err);
+        }
+    };
+
+    const fetchReportData = async () => {
         setLoading(true);
         setError(null);
+
+        const params = {};
+        if (selectedDomain && selectedDomain !== "All") params.domain = selectedDomain;
+
         try {
             if (activeTab === "employee") {
-                const res = await axios.get("http://localhost:5001/api/admin/employees", config);
+                const res = await axios.get("http://localhost:5001/api/admin/employees", { ...config, params });
                 setEmployees(res.data);
             } else if (activeTab === "attendance") {
-                try {
-                    const allRes = await axios.get("http://localhost:5001/api/attendance/all", config);
-                    setAttendance(allRes.data);
-                    // Calculate summary from the full data instead of a separate endpoint
-                    const total = allRes.data.length;
-                    const present = allRes.data.filter(a => a.status === 'Present').length;
-                    setAttendanceSummary({ totalRecords: total, present: present });
-                } catch (err) {
-                    console.error("Error fetching attendance:", err);
-                }
+                params.month = selectedMonth;
+                params.year = selectedYear;
+                const res = await axios.get("http://localhost:5001/api/attendance/all", { ...config, params });
+                setAttendance(res.data);
             } else if (activeTab === "task") {
-                const [allRes, statsRes] = await Promise.all([
-                    axios.get("http://localhost:5001/api/tasks/all", config),
-                    axios.get("http://localhost:5001/api/tasks/stats", config)
-                ]);
-                setTasks(allRes.data);
-                setTaskStats(statsRes.data);
+                const res = await axios.get("http://localhost:5001/api/tasks/all", { ...config, params });
+                setTasks(res.data);
             } else if (activeTab === "payroll") {
-                // Fetch payrolls - try various endpoints or robustly handle if some fail
-                // Assuming /api/payroll/all exists
-                const allRes = await axios.get("http://localhost:5001/api/payroll/all", config);
-                setPayrolls(allRes.data);
-
-                // Fetch summary if available, else derive from allRes
-                // Fetch summary if available, else derive from allRes
-                try {
-                    const currentDate = new Date();
-                    const currentMonth = currentDate.getMonth() + 1;
-                    const currentYear = currentDate.getFullYear();
-
-                    const summaryRes = await axios.get("http://localhost:5001/api/payroll/summary/monthly", {
-                        ...config,
-                        params: { month: currentMonth, year: currentYear }
-                    });
-                    setPayrollSummary(summaryRes.data);
-                } catch (err) {
-                    console.warn("Payroll summary endpoint fetching failed:", err.message);
-                }
-            } else if (activeTab === "profile") {
-                const res = await axios.get("http://localhost:5001/api/admin/logs", config);
-                setLogs(res.data);
+                params.month = selectedMonth;
+                params.year = selectedYear;
+                const res = await axios.get("http://localhost:5001/api/payroll/all", { ...config, params });
+                setPayrolls(res.data);
             }
         } catch (err) {
-            console.error("Error fetching report data:", err);
-            // Don't block UI mostly, just show what we can
-            // For tasks/attendance, errors might happen if data empty
+            console.error(`Error fetching ${activeTab} data:`, err);
+            setError("Failed to load report data.");
         } finally {
             setLoading(false);
         }
     };
 
-    const exportToExcel = (data, fileName) => {
+    const exportToExcel = (data, name) => {
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
-        XLSX.writeFile(workbook, `${fileName}_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+        XLSX.writeFile(workbook, `${name}_Report.xlsx`);
     };
 
-    // --- Render Helpers ---
+    // --- Chart Data Helpers ---
+    const getEmployeeChartData = () => {
+        const counts = {};
+        employees.forEach(emp => {
+            const domain = emp.domain || "Unknown";
+            counts[domain] = (counts[domain] || 0) + 1;
+        });
+        return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+    };
 
-    const renderTabs = () => (
-        <div className="tabs-container">
-            {["employee", "attendance", "task", "profile", "payroll"].map((tab) => (
-                <button
-                    key={tab}
-                    className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-                    onClick={() => setActiveTab(tab)}
-                >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)} Reports
-                </button>
-            ))}
+    const getAttendanceChartData = () => {
+        const counts = { Present: 0, Absent: 0, Late: 0, "Half Day": 0 };
+        attendance.forEach(att => {
+            if (counts[att.status] !== undefined) counts[att.status]++;
+        });
+        return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+    };
+
+    const getTaskChartData = () => {
+        const counts = { Pending: 0, "In Progress": 0, Completed: 0 };
+        tasks.forEach(task => {
+            if (counts[task.status] !== undefined) counts[task.status]++;
+        });
+        return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+    };
+
+    const getPayrollChartData = () => {
+        const counts = { Paid: 0, Pending: 0 };
+        payrolls.forEach(p => {
+            if (p.paymentStatus === "Paid") counts.Paid++;
+            else counts.Pending++;
+        });
+        return [
+            { name: "Paid", value: counts.Paid },
+            { name: "Pending", value: counts.Pending }
+        ];
+    };
+
+    // --- Render Components ---
+
+    const renderKPICards = () => (
+        <div className="kpi-grid">
+            <div className="kpi-card">
+                <div className="icon-wrapper blue">
+                    <i className="bi bi-people-fill"></i>
+                </div>
+                <div className="kpi-info">
+                    <h4>Total Employees</h4>
+                    <h2>{stats.totalEmployees}</h2>
+                </div>
+            </div>
+            <div className="kpi-card">
+                <div className="icon-wrapper green">
+                    <i className="bi bi-calendar-check-fill"></i>
+                </div>
+                <div className="kpi-info">
+                    <h4>Present Today</h4>
+                    <h2>{stats.presentToday}</h2>
+                </div>
+            </div>
+            <div className="kpi-card">
+                <div className="icon-wrapper orange">
+                    <i className="bi bi-hourglass-split"></i>
+                </div>
+                <div className="kpi-info">
+                    <h4>Pending Tasks</h4>
+                    <h2>{stats.pendingTasks}</h2>
+                </div>
+            </div>
+            <div className="kpi-card">
+                <div className="icon-wrapper purple">
+                    <i className="bi bi-cash-stack"></i>
+                </div>
+                <div className="kpi-info">
+                    <h4>Total Payroll ({MONTHS[selectedMonth - 1].label})</h4>
+                    <h2>${stats.totalPayroll?.toLocaleString()}</h2>
+                </div>
+            </div>
         </div>
     );
 
-    const renderEmployeeReport = () => {
-        // Filter out admin user
-        const filteredEmployees = employees.filter(emp => emp.email !== "admin@technova.com");
+    const renderFilters = () => (
+        <div className="filters-bar">
+            {/* Domain Filter - Common for all */}
+            <div className="filter-group">
+                <label>Domain</label>
+                <select value={selectedDomain} onChange={(e) => setSelectedDomain(e.target.value)}>
+                    {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+            </div>
 
-        // Filter data for export to match requirements (remove designation, ensure domain)
-        const exportData = filteredEmployees.map(emp => ({
-            Name: emp.fullName || emp.name, // Use fullName prioritizing over name
+            {/* Time Filters - Only for relevant tabs AND for KPI context */}
+            {(activeTab === "attendance" || activeTab === "payroll" || true) && (
+                <>
+                    <div className="filter-group">
+                        <label>Month</label>
+                        <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))}>
+                            {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                        </select>
+                    </div>
+                    <div className="filter-group">
+                        <label>Year</label>
+                        <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+                            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+                </>
+            )}
+
+            <button className="btn-refresh" onClick={() => { fetchStats(); fetchReportData(); }}>
+                <i className="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    );
+
+    const renderEmployeeTable = () => {
+        // Prepare export data
+        const exportData = employees.map(emp => ({
+            Name: emp.fullName || emp.name,
             Email: emp.email,
-            Domain: emp.domain || emp.department || 'N/A', // Fallback if department still exists in backend
-            "Phone Number": emp.phone || emp.phoneNumber || 'N/A' // Replace Joining Date with Phone
+            Phone: emp.phone,
+            Domain: emp.domain,
+            "Joining Date": new Date(emp.createdAt).toLocaleDateString(),
+            Status: "Active"
         }));
 
         return (
-            <div className="report-content fade-in">
+            <div className="report-card fade-in">
+                <div className="chart-section-wrapper">
+                    <h3>Employee Distribution</h3>
+                    <div style={{ width: "100%", height: 300 }}>
+                        <ResponsiveContainer>
+                            <PieChart>
+                                <Pie
+                                    data={getEmployeeChartData()}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={100}
+                                    fill="#8884d8"
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    label
+                                >
+                                    {getEmployeeChartData().map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
                 <div className="report-header">
-                    <h3>Employee Directory ({filteredEmployees.length})</h3>
+                    <h3>Employee Directory</h3>
                     <button className="btn-export" onClick={() => exportToExcel(exportData, "Employees")}>
-                        <i className="bi bi-file-earmark-excel"></i> Export Excel
+                        Export Excel
                     </button>
                 </div>
                 <div className="table-responsive">
@@ -151,20 +284,24 @@ const Reports = () => {
                             <tr>
                                 <th>Name</th>
                                 <th>Email</th>
+                                <th>Phone</th>
                                 <th>Domain</th>
-                                <th>Phone Number</th>
+                                <th>Joining Date</th>
+                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredEmployees.map((emp) => (
+                            {employees.map(emp => (
                                 <tr key={emp._id}>
-                                    <td>{emp.fullName || emp.name}</td>
+                                    <td className="fw-bold">{emp.fullName || emp.name}</td>
                                     <td>{emp.email}</td>
-                                    <td>{emp.domain}</td>
-                                    <td>{emp.phone || emp.phoneNumber || 'N/A'}</td>
+                                    <td>{emp.phone || "N/A"}</td>
+                                    <td><span className="badge domain-badge">{emp.domain}</span></td>
+                                    <td>{new Date(emp.createdAt).toLocaleDateString()}</td>
+                                    <td><span className="badge status-success">Active</span></td>
                                 </tr>
                             ))}
-                            {filteredEmployees.length === 0 && <tr><td colSpan="4" className="no-data">No employees found</td></tr>}
+                            {employees.length === 0 && <tr><td colSpan="6" className="no-data">No employees found</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -172,174 +309,64 @@ const Reports = () => {
         );
     };
 
-    const renderAttendanceReport = () => {
-        // Prepare export data with correct field names
+    const renderAttendanceTable = () => {
         const exportData = attendance.map(att => ({
-            Employee: att.employeeId?.fullName || att.employeeId?.name || att.employeeId?.email || "Unknown",
+            "Employee Name": att.employeeId?.fullName || "Unknown",
             Date: new Date(att.date).toLocaleDateString(),
             Status: att.status,
-            "Check In": att.checkIn ? new Date(att.checkIn).toLocaleTimeString() : "-",
-            "Check Out": att.checkOut ? new Date(att.checkOut).toLocaleTimeString() : "-"
+            "Check-in": att.checkIn ? new Date(att.checkIn).toLocaleTimeString() : "-",
+            "Check-out": att.checkOut ? new Date(att.checkOut).toLocaleTimeString() : "-"
         }));
 
         return (
-            <div className="report-content fade-in">
-                <div className="report-header">
+            <div className="report-card fade-in">
+                <div className="chart-section-wrapper">
                     <h3>Attendance Overview</h3>
+                    <div style={{ width: "100%", height: 300 }}>
+                        <ResponsiveContainer>
+                            <BarChart data={getAttendanceChartData()}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="name" stroke="#94a3b8" />
+                                <YAxis stroke="#94a3b8" />
+                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
+                                <Legend />
+                                <Bar dataKey="value" fill="#10b981" barSize={50}>
+                                    {getAttendanceChartData().map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+                <div className="report-header">
+                    <h3>Attendance Report</h3>
                     <button className="btn-export" onClick={() => exportToExcel(exportData, "Attendance")}>
-                        <i className="bi bi-file-earmark-excel"></i> Export Excel
-                    </button>
-                </div>
-
-                {/* Summary Cards */}
-                <div className="stats-grid">
-                    <div className="stat-card">
-                        <h4>Total Records</h4>
-                        <div className="number">{attendance.length}</div>
-                    </div>
-                    <div className="stat-card">
-                        <h4>Present</h4>
-                        <div className="number">{attendance.filter(a => a.status === 'Present').length}</div>
-                    </div>
-                </div>
-
-                <div className="table-responsive mt-4">
-                    <table className="styled-table">
-                        <thead>
-                            <tr>
-                                <th>Employee</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th>Check In</th>
-                                <th>Check Out</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {attendance.map((att) => (
-                                <tr key={att._id}>
-                                    <td>{att.employeeId?.fullName || att.employeeId?.name || att.employeeId?.email || "Unknown"}</td>
-                                    <td>{new Date(att.date).toLocaleDateString()}</td>
-                                    <td>
-                                        <span className={`badge status-${att.status?.toLowerCase() || 'present'}`}>
-                                            {att.status}
-                                        </span>
-                                    </td>
-                                    <td>{att.checkIn ? new Date(att.checkIn).toLocaleTimeString() : "-"}</td>
-                                    <td>{att.checkOut ? new Date(att.checkOut).toLocaleTimeString() : "-"}</td>
-                                </tr>
-                            ))}
-                            {attendance.length === 0 && <tr><td colSpan="5" className="no-data">No attendance records</td></tr>}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        )
-    };
-
-    const renderTaskReport = () => {
-        // Prepare chart data
-        const statusData = [
-            { name: "Pending", value: tasks.filter(t => t.status === "Pending").length, color: "#f6c23e" },
-            { name: "In Progress", value: tasks.filter(t => t.status === "In Progress").length, color: "#36b9cc" },
-            { name: "Completed", value: tasks.filter(t => t.status === "Completed").length, color: "#1cc88a" }
-        ].filter(d => d.value > 0);
-
-        return (
-            <div className="report-content fade-in">
-                <div className="report-header">
-                    <h3>Task Performance</h3>
-                    <button className="btn-export" onClick={() => exportToExcel(tasks, "Tasks")}>
-                        <i className="bi bi-file-earmark-excel"></i> Export Excel
-                    </button>
-                </div>
-
-                <div className="charts-container">
-                    {statusData.length > 0 ? (
-                        <div className="chart-wrapper">
-                            <h4>Task Status Distribution</h4>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <PieChart>
-                                    <Pie
-                                        data={statusData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={100}
-                                        fill="#8884d8"
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                        label
-                                    >
-                                        {statusData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                    ) : <p className="no-chart-data">No task data for charts</p>}
-
-                    {/* Can add another chart here for productivity over time if data exists */}
-                </div>
-
-                <div className="table-responsive mt-4">
-                    <table className="styled-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Assigned To</th>
-                                <th>Status</th>
-                                <th>Priority</th>
-                                <th>Due Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {tasks.map((task) => (
-                                <tr key={task._id}>
-                                    <td>{task.title}</td>
-                                    <td>{task.assignedTo?.name || task.assignedTo?.email}</td>
-                                    <td><span className={`badge status-${task.status.toLowerCase().replace(' ', '')}`}>{task.status}</span></td>
-                                    <td>{task.priority}</td>
-                                    <td>{new Date(task.dueDate).toLocaleDateString()}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        )
-    };
-
-    const renderProfileReport = () => {
-        const profileLogs = logs.filter(l => l.action === "PROFILE_UPDATE");
-        return (
-            <div className="report-content fade-in">
-                <div className="report-header">
-                    <h3>Profile Updates Log</h3>
-                    <button className="btn-export" onClick={() => exportToExcel(profileLogs, "ProfileUpdates")}>
-                        <i className="bi bi-file-earmark-excel"></i> Export Excel
+                        Export Excel
                     </button>
                 </div>
                 <div className="table-responsive">
                     <table className="styled-table">
                         <thead>
                             <tr>
-                                <th>Employee</th>
-                                <th>Details</th>
+                                <th>Employee Name</th>
                                 <th>Date</th>
+                                <th>Status</th>
+                                <th>Check-in</th>
+                                <th>Check-out</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {profileLogs.map((log) => (
-                                <tr key={log._id}>
-                                    <td>{log.userName}</td>
-                                    <td>{log.details}</td>
-                                    <td>{new Date(log.createdAt).toLocaleString()}</td>
+                            {attendance.map(att => (
+                                <tr key={att._id}>
+                                    <td className="fw-bold">{att.employeeId?.fullName || "Unknown"}</td>
+                                    <td>{new Date(att.date).toLocaleDateString()}</td>
+                                    <td><span className={`badge status-${att.status.toLowerCase().replace(" ", "")}`}>{att.status}</span></td>
+                                    <td>{att.checkIn ? new Date(att.checkIn).toLocaleTimeString() : "-"}</td>
+                                    <td>{att.checkOut ? new Date(att.checkOut).toLocaleTimeString() : "-"}</td>
                                 </tr>
                             ))}
-                            {profileLogs.length === 0 && <tr><td colSpan="3" className="no-data">No profile update activity recorded</td></tr>}
+                            {attendance.length === 0 && <tr><td colSpan="5" className="no-data">No attendance records found</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -347,334 +374,518 @@ const Reports = () => {
         );
     };
 
+    const renderTaskTable = () => {
+        const exportData = tasks.map(t => ({
+            "Task Title": t.title,
+            "Assigned To": t.assignedTo?.fullName || t.assignedTo?.email || "Unknown",
+            "Assigned Date": new Date(t.createdAt).toLocaleDateString(),
+            Status: t.status,
+            "Completion Date": t.completedAt ? new Date(t.completedAt).toLocaleDateString() : "-"
+        }));
 
-
-    const renderPayrollReport = () => (
-        <div className="report-content fade-in">
-            <div className="report-header">
-                <h3>Payroll & Salary Reports</h3>
-                <button className="btn-export" onClick={() => exportToExcel(payrolls, "Payroll")}>
-                    <i className="bi bi-file-earmark-excel"></i> Export Excel
-                </button>
-            </div>
-
-            <div className="table-responsive">
-                <table className="styled-table">
-                    <thead>
-                        <tr>
-                            <th>Employee</th>
-                            <th>Domain</th>
-                            <th>Month/Year</th>
-                            <th>Basic Salary</th>
-                            <th>Bonuses</th>
-                            <th>Deductions</th>
-                            <th>Net Salary</th>
-                            <th>Paid Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {payrolls.map((pay) => (
-                            <tr key={pay._id}>
-                                <td>{pay.employeeId?.fullName || pay.employeeId?.name || pay.employeeId?.email || "Unknown"}</td>
-                                <td>{pay.employeeId?.domain || "N/A"}</td>
-                                <td>{pay.month}/{pay.year}</td>
-                                <td>${pay.baseSalary}</td>
-                                <td className="text-success">+${pay.bonus || 0}</td>
-                                <td className="text-danger">-${(pay.totalDeductions || 0).toFixed(2)}</td>
-                                <td><strong>${pay.netSalary}</strong></td>
-                                <td>
-                                    <span className={`badge status-${pay.paymentStatus === 'Paid' ? 'completed' : 'pending'}`}>
-                                        {pay.paymentStatus || "Pending"}
-                                    </span>
-                                </td>
+        return (
+            <div className="report-card fade-in">
+                <div className="chart-section-wrapper">
+                    <h3>Task Progress</h3>
+                    <div style={{ width: "100%", height: 300 }}>
+                        <ResponsiveContainer>
+                            <PieChart>
+                                <Pie
+                                    data={getTaskChartData()}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={100}
+                                    fill="#8884d8"
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    label
+                                >
+                                    {getTaskChartData().map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+                <div className="report-header">
+                    <h3>Task Report</h3>
+                    <button className="btn-export" onClick={() => exportToExcel(exportData, "Tasks")}>
+                        Export Excel
+                    </button>
+                </div>
+                <div className="table-responsive">
+                    <table className="styled-table">
+                        <thead>
+                            <tr>
+                                <th>Task Title</th>
+                                <th>Assigned To</th>
+                                <th>Assigned Date</th>
+                                <th>Status</th>
+                                <th>Completion Date</th>
                             </tr>
-                        ))}
-                        {payrolls.length === 0 && <tr><td colSpan="7" className="no-data">No payroll records generated</td></tr>}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {tasks.map(t => (
+                                <tr key={t._id}>
+                                    <td className="fw-bold">{t.title}</td>
+                                    <td>
+                                        <div className="user-cell">
+                                            <div className="user-icon small">{t.assignedTo?.fullName?.charAt(0) || "U"}</div>
+                                            <div>
+                                                <div>{t.assignedTo?.fullName || "Unknown"}</div>
+                                                <small style={{ opacity: 0.7 }}>{t.assignedTo?.email}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{new Date(t.createdAt).toLocaleDateString()}</td>
+                                    <td><span className={`badge status-${t.status.toLowerCase().replace(" ", "")}`}>{t.status}</span></td>
+                                    <td>{t.completedAt ? new Date(t.completedAt).toLocaleDateString() : "-"}</td>
+                                </tr>
+                            ))}
+                            {tasks.length === 0 && <tr><td colSpan="5" className="no-data">No tasks found</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
+
+    const renderPayrollTable = () => {
+        const exportData = payrolls.map(p => ({
+            "Employee Name": p.employeeId?.fullName || "Unknown",
+            Month: `${p.month}/${p.year}`,
+            "Basic Salary": p.baseSalary,
+            Deductions: p.totalDeductions,
+            "Net Salary": p.netSalary,
+            "Payment Status": p.paymentStatus
+        }));
+
+        return (
+            <div className="report-card fade-in">
+                <div className="chart-section-wrapper">
+                    <h3>Payroll Status</h3>
+                    <div style={{ width: "100%", height: 300 }}>
+                        <ResponsiveContainer>
+                            <BarChart data={getPayrollChartData()}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="name" stroke="#94a3b8" />
+                                <YAxis stroke="#94a3b8" />
+                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
+                                <Legend />
+                                <Bar dataKey="value" fill="#6366f1" barSize={50} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+                <div className="report-header">
+                    <h3>Payroll Report</h3>
+                    <button className="btn-export" onClick={() => exportToExcel(exportData, "Payroll")}>
+                        Export Excel
+                    </button>
+                </div>
+                <div className="table-responsive">
+                    <table className="styled-table">
+                        <thead>
+                            <tr>
+                                <th>Employee Name</th>
+                                <th>Month</th>
+                                <th>Basic Salary</th>
+                                <th>Deductions</th>
+                                <th>Net Salary</th>
+                                <th>Payment Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {payrolls.map(p => (
+                                <tr key={p._id}>
+                                    <td className="fw-bold">{p.employeeId?.fullName || "Unknown"}</td>
+                                    <td>{p.month}/{p.year}</td>
+                                    <td>\${p.baseSalary}</td>
+                                    <td className="text-danger">-\${p.totalDeductions?.toFixed(2)}</td>
+                                    <td className="text-success fw-bold">\${p.netSalary?.toFixed(2)}</td>
+                                    <td><span className={`badge status-${p.paymentStatus === 'Paid' ? 'completed' : 'pending'}`}>{p.paymentStatus}</span></td>
+                                </tr>
+                            ))}
+                            {payrolls.length === 0 && <tr><td colSpan="6" className="no-data">No payroll records found</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
 
     return (
-        <div className="reports-container">
+        <div className="reports-page">
             <style>{`
-        /* --- Internal CSS for Reports Module --- */
-        
-        .reports-container {
-            padding: 2rem;
-            background: #f8f9fc;
-            min-height: 100vh;
-            font-family: 'Inter', sans-serif;
-            color: #333 !important; /* Force dark text */
-        }
+                /* Modern Dark/Vibrant Theme Variables */
+                :root {
+                    --bg-dark: #0f172a;
+                    --bg-card: #1e293b;
+                    --text-primary: #f8fafc;
+                    --text-secondary: #94a3b8;
+                    --accent-primary: #6366f1; /* Indigo */
+                    --accent-secondary: #ec4899; /* Pink */
+                    --accent-success: #10b981;
+                    --accent-warning: #f59e0b;
+                    --accent-danger: #ef4444;
+                    --table-border: #334155;
+                    --glass-bg: rgba(30, 41, 59, 0.7);
+                }
 
-        /* Tabs Navigation */
-        .tabs-container {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 2rem;
-            overflow-x: auto;
-            padding-bottom: 1px;
-            border-bottom: 2px solid #d1d3e2; /* Darker border */
-        }
+                .reports-page {
+                    min-height: 100vh;
+                    background-color: var(--bg-dark);
+                    color: var(--text-primary);
+                    padding: 2rem;
+                    font-family: 'Inter', sans-serif;
+                }
 
-        .tab-btn {
-            background: none;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            font-size: 0.95rem;
-            font-weight: 700; /* Bolder */
-            color: #5a5c69; /* Darker gray */
-            cursor: pointer;
-            transition: all 0.3s ease;
-            white-space: nowrap;
-            border-radius: 8px 8px 0 0;
-        }
+                h2, h3, h4 { margin: 0; color: var(--text-primary); }
 
-        .tab-btn:hover {
-            color: #2e59d9;
-            background: #eaecf4;
-        }
+                /* Header */
+                .page-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 2rem;
+                    padding-bottom: 1rem;
+                    border-bottom: 1px solid var(--table-border);
+                }
 
-        .tab-btn.active {
-            color: #2e59d9; /* Stronger Blue */
-            border-bottom: 3px solid #2e59d9;
-            background: #fff;
-        }
+                .back-btn {
+                    background: rgba(255,255,255,0.1);
+                    color: var(--text-primary);
+                    border: 1px solid rgba(255,255,255,0.2);
+                    padding: 0.5rem 1rem;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+                .back-btn:hover { background: rgba(255,255,255,0.2); }
 
-        /* Report Content Area */
-        .report-content {
-            background: #fff;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
-            color: #333 !important;
-        }
+                /* KPI Grid */
+                .kpi-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                    gap: 1.5rem;
+                    margin-bottom: 2.5rem;
+                }
 
-        .report-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
+                .kpi-card {
+                    background: var(--bg-card);
+                    border-radius: 16px;
+                    padding: 1.5rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 1.5rem;
+                    border: 1px solid var(--table-border);
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                    transition: transform 0.2s;
+                }
+                .kpi-card:hover { transform: translateY(-5px); }
 
-        .report-header h3 {
-            margin: 0;
-            color: #4e73df;
-            font-weight: 700;
-        }
+                .icon-wrapper {
+                    width: 50px;
+                    height: 50px;
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.5rem;
+                }
+                .icon-wrapper.blue { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+                .icon-wrapper.green { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+                .icon-wrapper.orange { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+                .icon-wrapper.purple { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
 
-        .info-text {
-            font-size: 0.85rem;
-            color: #e74a3b;
-            font-weight: 600;
-        }
+                .kpi-info h4 { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+                .kpi-info h2 { font-size: 1.8rem; font-weight: 700; color: var(--text-primary); }
 
-        .btn-export {
-            background: #1cc88a;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: background 0.2s;
-        }
+                /* Filters Bar */
+                .filters-bar {
+                    display: flex;
+                    gap: 1.5rem;
+                    background: var(--bg-card);
+                    padding: 1rem;
+                    border-radius: 12px;
+                    margin-bottom: 2rem;
+                    align-items: flex-end;
+                    flex-wrap: wrap;
+                    border: 1px solid var(--table-border);
+                }
 
-        .btn-export:hover {
-            background: #17a673;
-        }
+                .filter-group {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
 
-        /* Stats & Charts */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
+                .filter-group label {
+                    font-size: 0.85rem;
+                    color: var(--text-secondary);
+                    font-weight: 600;
+                }
 
-        .stat-card {
-            background: #fff;
-            padding: 1.5rem;
-            border-left: 4px solid #4e73df;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            border-radius: 8px;
-        }
-        
-        .stat-card h4 {
-            margin: 0 0 0.5rem 0;
-            font-size: 0.9rem;
-            color: #4e73df; /* Changed from light gray to blue for visibility */
-            font-weight: 700;
-            text-transform: uppercase;
-        }
+                .filter-group select {
+                    background: var(--bg-dark);
+                    color: var(--text-primary);
+                    border: 1px solid var(--table-border);
+                    padding: 0.6rem 1rem;
+                    border-radius: 8px;
+                    min-width: 150px;
+                    outline: none;
+                    cursor: pointer;
+                }
 
-        .stat-card .number {
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: #333; /* Dark black */
-        }
+                .btn-refresh {
+                    background: var(--accent-primary);
+                    color: white;
+                    border: none;
+                    padding: 0.6rem 1.2rem;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    margin-left: auto;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    transition: opacity 0.2s;
+                }
+                .btn-refresh:hover { opacity: 0.9; }
 
-        .charts-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
+                /* Tabs */
+                .tabs-container {
+                    display: flex;
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                    overflow-x: auto;
+                    padding-bottom: 5px;
+                }
 
-        .chart-wrapper {
-            flex: 1;
-            min-width: 300px;
-            background: #fff;
-            padding: 1rem;
-            border-radius: 8px;
-            border: 1px solid #d1d3e2;
-        }
-        
-        .chart-wrapper h4 {
-            text-align: center;
-            color: #333;
-            font-weight: 700;
-            margin-bottom: 1rem;
-        }
+                .tab-btn {
+                    background: transparent;
+                    border: none;
+                    color: var(--text-secondary);
+                    padding: 0.75rem 1.5rem;
+                    cursor: pointer;
+                    font-weight: 600;
+                    border-radius: 8px;
+                    transition: all 0.3s;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    white-space: nowrap;
+                }
 
-        .no-chart-data {
-            text-align: center;
-            color: #5a5c69;
-            padding: 2rem;
-            border: 1px dashed #d1d3e2;
-            border-radius: 8px;
-        }
+                .tab-btn:hover {
+                    background: rgba(255,255,255,0.05);
+                    color: var(--text-primary);
+                }
 
-        /* Tables */
-        .table-responsive {
-            overflow-x: auto;
-        }
+                .tab-btn.active {
+                    background: var(--accent-primary);
+                    color: white;
+                    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+                }
 
-        .styled-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.95rem;
-            min-width: 600px;
-            color: #333 !important; /* Ensure table text is dark */
-        }
+                /* Report Card */
+                .report-card {
+                    background: var(--bg-card);
+                    border-radius: 16px;
+                    padding: 2rem;
+                    border: 1px solid var(--table-border);
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+                }
 
-        .styled-table thead tr {
-            background-color: #4e73df;
-            color: #ffffff !important;
-            text-align: left;
-        }
+                .report-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 1.5rem;
+                }
 
-        .styled-table th, .styled-table td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #d1d3e2;
-            color: #333; /* Explicit black for cells */
-        }
+                .btn-export {
+                    background: var(--accent-success);
+                    color: white;
+                    border: none;
+                    padding: 0.5rem 1rem;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    font-size: 0.9rem;
+                    transition: transform 0.2s;
+                }
+                .btn-export:hover { transform: translateY(-2px); }
 
-        .styled-table th {
-            color: #fff !important; /* Explicit white for headers */
-        }
+                /* Table Styling */
+                .table-responsive {
+                    overflow-x: auto;
+                }
 
-        .styled-table tbody tr:nth-of-type(even) {
-            background-color: #f8f9fc; /* Slightly lighter than previous gray */
-        }
+                .styled-table {
+                    width: 100%;
+                    border-collapse: separate;
+                    border-spacing: 0;
+                    margin-top: 1rem;
+                    font-size: 0.95rem;
+                }
 
-        .styled-table tbody tr:last-of-type {
-            border-bottom: 2px solid #4e73df;
-        }
+                .styled-table thead th {
+                    text-align: left;
+                    padding: 1rem;
+                    background: rgba(255,255,255,0.03);
+                    color: var(--text-secondary);
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    font-size: 0.8rem;
+                    letter-spacing: 0.05em;
+                    border-bottom: 2px solid var(--table-border);
+                }
 
-        .styled-table tbody tr:hover {
-            background-color: #eaecf4;
-        }
-        
-        .styled-table td {
-            font-weight: 500;
-        }
+                .styled-table tbody tr {
+                    transition: background 0.2s;
+                }
+                
+                .styled-table tbody tr:hover {
+                    background: rgba(255,255,255,0.02);
+                }
 
-        .no-data {
-            text-align: center;
-            padding: 2rem;
-            color: #5a5c69;
-            font-weight: 600;
-        }
+                .styled-table td {
+                    padding: 1rem;
+                    border-bottom: 1px solid var(--table-border);
+                    color: var(--text-primary);
+                    vertical-align: middle;
+                }
 
-        /* Badges */
-        .badge {
-            padding: 0.4rem 0.75rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: white;
-            text-transform: capitalize;
-            display: inline-block;
-        }
+                /* User Cell */
+                .user-cell {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                }
+                .user-icon {
+                    width: 32px;
+                    height: 32px;
+                    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: bold;
+                    color: white;
+                    font-size: 0.9rem;
+                }
+                .user-icon.small { width: 28px; height: 28px; font-size: 0.8rem; }
 
-        .status-present, .status-completed, .status-success { background: #1cc88a; }
-        .status-absent, .status-failed, .status-late { background: #e74a3b; }
-        .status-leave, .status-pending { background: #f6c23e; color: #212529; /* Dark text on yellow */ }
-        .status-inprogress { background: #36b9cc; }
-        
-        .text-success { color: #1cc88a !important; font-weight: 600; }
-        .text-danger { color: #e74a3b !important; font-weight: 600; }
-        .text-muted { color: #858796; }
+                /* Badges */
+                .badge {
+                    padding: 0.35rem 0.75rem;
+                    border-radius: 20px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    display: inline-block;
+                }
+                
+                .domain-badge {
+                    background: rgba(99, 102, 241, 0.15);
+                    color: #a5b4fc;
+                    border: 1px solid rgba(99, 102, 241, 0.3);
+                }
 
-        /* Animations */
-        .fade-in {
-            animation: fadeIn 0.4s ease-in;
-        }
+                .status-present, .status-completed, .status-paid, .status-success, .status-active {
+                    background: rgba(16, 185, 129, 0.15);
+                    color: #34d399;
+                }
+                
+                .status-absent, .status-failed, .status-late {
+                    background: rgba(239, 68, 68, 0.15);
+                    color: #fca5a5;
+                }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+                .status-pending, .status-inprogress {
+                    background: rgba(245, 158, 11, 0.15);
+                    color: #fcd34d;
+                }
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                /* Utility */
+                .text-success { color: var(--accent-success) !important; }
+                .text-danger { color: var(--accent-danger) !important; }
+                .fw-bold { font-weight: 700; }
+                .no-data { text-align: center; padding: 3rem; color: var(--text-secondary); font-style: italic; }
+
+                /* Animation */
+                .fade-in { animation: fadeIn 0.5s ease-out; }
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+
+                .chart-section-wrapper {
+                    margin-bottom: 2rem;
+                    background: rgba(15, 23, 42, 0.4);
+                    padding: 1.5rem;
+                    border-radius: 16px;
+                    border: 1px solid var(--table-border);
+                }
+                .chart-section-wrapper h3 {
+                    margin-bottom: 1rem;
+                    font-size: 1.1rem;
+                    color: var(--text-secondary);
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                }
+            `}</style>
+
+            <div className="page-header">
                 <div>
-                    <h2 style={{ color: '#5a5c69', marginBottom: '0.5rem', fontWeight: 800 }}>Admin Reports & Analytics</h2>
-                    <p style={{ color: '#858796', margin: 0 }}>Comprehensive insights and data exports</p>
+                    <h2>Reports & Analytics</h2>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                        Real-time insights and database-driven records.
+                    </p>
                 </div>
-                <button
-                    onClick={() => navigate('/admin-dashboard')}
-                    style={{
-                        background: '#4e73df',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '0.75rem 1.25rem',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: '600',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        fontSize: '0.9rem'
-                    }}
-                >
+                <button className="back-btn" onClick={() => navigate('/admin-dashboard')}>
                     <i className="bi bi-arrow-left"></i> Back to Dashboard
                 </button>
             </div>
 
-            {renderTabs()}
+            {renderKPICards()}
+
+            {renderFilters()}
+
+            <div className="tabs-container">
+                <button className={`tab-btn ${activeTab === "employee" ? "active" : ""}`} onClick={() => setActiveTab("employee")}>
+                    <i className="bi bi-people-fill"></i> Employees
+                </button>
+                <button className={`tab-btn ${activeTab === "attendance" ? "active" : ""}`} onClick={() => setActiveTab("attendance")}>
+                    <i className="bi bi-calendar-check-fill"></i> Attendance
+                </button>
+                <button className={`tab-btn ${activeTab === "task" ? "active" : ""}`} onClick={() => setActiveTab("task")}>
+                    <i className="bi bi-list-task"></i> Tasks
+                </button>
+                <button className={`tab-btn ${activeTab === "payroll" ? "active" : ""}`} onClick={() => setActiveTab("payroll")}>
+                    <i className="bi bi-cash-stack"></i> Payroll
+                </button>
+            </div>
 
             {loading ? (
-                <div style={{ textAlign: 'center', padding: '2rem' }}>
-                    <div className="spinner-border text-primary" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                    </div>
-                    <p className="mt-2 text-muted">Fetching report data...</p>
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <div className="spinner-border text-light" role="status"></div>
+                    <p className="mt-3 text-secondary">Loading report data...</p>
                 </div>
             ) : (
-                <>
-                    {activeTab === "employee" && renderEmployeeReport()}
-                    {activeTab === "attendance" && renderAttendanceReport()}
-                    {activeTab === "task" && renderTaskReport()}
-                    {activeTab === "profile" && renderProfileReport()}
-                    {activeTab === "payroll" && renderPayrollReport()}
-                </>
+                <div className="report-container-inner">
+                    {activeTab === "employee" && renderEmployeeTable()}
+                    {activeTab === "attendance" && renderAttendanceTable()}
+                    {activeTab === "task" && renderTaskTable()}
+                    {activeTab === "payroll" && renderPayrollTable()}
+                </div>
             )}
         </div>
     );
